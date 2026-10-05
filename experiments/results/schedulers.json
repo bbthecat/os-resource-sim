@@ -1,0 +1,37 @@
+[
+  {
+    "scheduler": "FCFS",
+    "avg_waiting": 131.0,
+    "avg_turnaround": 261.3333333333333,
+    "avg_response": 0.5,
+    "context_switches": 54
+  },
+  {
+    "scheduler": "SJF",
+    "avg_waiting": 119.83333333333333,
+    "avg_turnaround": 193.66666666666666,
+    "avg_response": 31.333333333333332,
+    "context_switches": 30
+  },
+  {
+    "scheduler": "RR (q=2)",
+    "avg_waiting": 116.0,
+    "avg_turnaround": 291.0,
+    "avg_response": 0.5,
+    "context_switches": 167
+  },
+  {
+    "scheduler": "RR (q=4)",
+    "avg_waiting": 86.5,
+    "avg_turnaround": 303.8333333333333,
+    "avg_response": 0.5,
+    "context_switches": 114
+  },
+  {
+    "scheduler": "Priority",
+    "avg_waiting": 117.33333333333333,
+    "avg_turnaround": 196.83333333333334,
+    "avg_response": 0.5,
+    "context_switches": 34
+  }
+]

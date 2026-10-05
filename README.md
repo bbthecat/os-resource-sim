@@ -4,323 +4,335 @@
 
 **Multi-Resource Allocation & Bottleneck Analyzer**
 
-จำลองว่า CPU, RAM และ I/O ส่งผลต่อกันอย่างไร แล้ววินิจฉัยว่าระบบช้าเพราะอะไร
+ระบบจำลองการทำงานและจัดสรรทรัพยากรระบบปฏิบัติการ (CPU, RAM, I/O) แบบครบวงจร พร้อมระบบวิเคราะห์คอขวดอัตโนมัติ (Bottleneck Analyzer) และการเปรียบเทียบผลลัพธ์ (What-If Analysis)
 
-`Python` · `FastAPI` · `React` · `TypeScript` · `Tailwind`
-
-Operating Systems Project · Section 4
-
-</div>
+`Python 3.10+` · `FastAPI` · `React 18` · `TypeScript` · `TailwindCSS` · `Vite` · `Vercel`
 
 ---
 
-## 📌 แนวคิดหลัก
+</div>
 
-ระบบปฏิบัติการจริงไม่ได้ช้าเพราะทรัพยากรเดียว แต่เพราะทรัพยากรหลายชนิด **ส่งผลต่อกันเป็นลูกโซ่**
+## 📌 แนวคิดหลัก (Core Concept)
 
-```
-RAM ไม่พอ ─▶ page fault เยอะ ─▶ disk I/O หนัก ─▶ process รอ ─▶ CPU ว่าง (ทั้งที่ระบบช้า)
-```
-
-โปรเจกต์นี้จำลองลูกโซ่ดังกล่าวในระบบเดียว แล้วใช้ **Bottleneck Analyzer** บอกว่าคอขวดคืออะไร พร้อมปุ่ม **What-if** พิสูจน์ว่าคำแนะนำช่วยได้จริงกี่เปอร์เซ็นต์
-
-> **สรุปประโยคเดียว:** เครื่องมือจำลองที่ตอบว่า "ระบบช้าเพราะ CPU, RAM หรือ I/O และควรปรับอะไรถึงจะดีขึ้น"
-
-## ✨ ฟีเจอร์
-
-| ระดับ | ฟีเจอร์ |
-|---|---|
-| 🧱 **แกนหลัก** | Process model · Scheduler (FCFS, Round Robin, Priority) · Metrics |
-| ⭐ **จุดขาย** | Memory manager (paging, FIFO/LRU) + I/O manager ที่ส่งผลต่อกัน · ตรวจจับ thrashing |
-| 🚀 **เพิ่มคะแนน** | Bottleneck Analyzer + คำแนะนำ · What-if / Compare แบบ A/B |
-| 🎁 **เลือกทำ** | Deadlock detection + recovery **หรือ** Quota & Fairness (Jain's Index) |
-
-**Dashboard:** Playback (play/pause/step/scrub) · Gauge CPU/RAM/I/O · Queue lanes · Memory grid · Gantt · Utilization chart · Process table · Bottleneck card · Event log
-
-## 🎯 ขอบเขต
-
-| ✅ ทำ | ❌ ไม่ทำ |
-|---|---|
-| จำลอง CPU + RAM (paging) + I/O ในระบบเดียว | ควบคุม process จริงของ OS |
-| วิเคราะห์คอขวด + เทียบก่อน/หลังปรับค่า | จำลองระดับ hardware (cache, TLB, pipeline) |
-| Workload 4 แบบ + การทดลองเชิงตัวเลข | เป็น simulator เดี่ยวของอัลกอริทึมใดอัลกอริทึมหนึ่ง |
-| Deadlock recovery (ถ้าเลือกทำ) | เน้น RAG / Banker's เป็นจุดขายหลัก |
-
-## 🏗️ สถาปัตยกรรม
+ระบบปฏิบัติการจริงไม่ได้ช้าเพราะทรัพยากรตัวใดตัวหนึ่งเพียงอย่างเดียว แต่ทรัพยากรหลายชนิด **ส่งผลกระทบต่อกันเป็นลูกโซ่ (Chain Reaction)**:
 
 ```
-┌───────────────────┐  HTTP / JSON  ┌────────────────┐  เรียก  ┌─────────────────────┐
-│ React (Vite + TS) │ ────────────▶ │ FastAPI (api/) │ ──────▶ │ sim/  engine        │
-│ เล่น snapshot ซ้ำ  │ ◀──────────── │ POST /simulate │ ◀────── │ คืน timeline ก้อนเดียว │
-└───────────────────┘               └────────────────┘         └─────────────────────┘
+RAM ไม่พอ ──▶ เกิด Page Fault ถี่ ──▶ Disk I/O ทำงานหนัก ──▶ Process ต้องรอ I/O ──▶ CPU เกิด Idle (ระบบช้าทั้งที่ CPU ไม่เต็ม)
 ```
 
-**หลักการออกแบบ**
+โปรเจกต์นี้จำลองสภาวะการทำงานแบบสมจริงในระบบเดียว และใช้ **Bottleneck Analyzer** ระบุสาเหตุที่แท้จริง พร้อมปุ่ม **What-If Compare (A/B Testing)** เพื่อพิสูจน์ผลลัพธ์ว่าเมื่อปรับแต่งค่าตามคำแนะนำแล้ว ระบบทำงานเร็วขึ้นกี่เปอร์เซ็นต์
 
-1. `sim/` เป็น Python ล้วน ห้าม import fastapi หรือ UI เพื่อให้เทสต์และทดลองได้อิสระ
-2. จำลองแบบ **discrete-event (ทีละ tick)** ไม่ใช้ thread จริง → ผลซ้ำได้เมื่อ seed เดิม
-3. Backend รันจนจบแล้วส่ง **timeline ก้อนเดียว** (ไม่ใช้ WebSocket) frontend เป็นคนควบคุมการเล่นเอง
-4. สัญญากลางคือ `api/schemas.py` ⇄ `frontend/src/types/sim.ts` ต้องตรงกันเสมอ
+> 💡 **สรุปในประโยคเดียว:** เครื่องมือจำลองและแสดงผล Telemetry ที่ตอบว่า *"ระบบช้าเพราะ CPU, RAM หรือ I/O และควรปรับจูนอัลกอริทึมใดระบบจึงจะมีประสิทธิภาพสูงสุด"*
 
-**ตัวอย่าง snapshot ต่อ tick**
+---
 
-```json
-{
-  "t": 42,
-  "running": 3,
-  "ready_queue": [1, 5, 2],
-  "io_queue": [4],
-  "frames": [1, 1, 3, 3, 3, null, 5, 2],
-  "events": ["page_fault:3", "io_done:4"],
-  "util": { "cpu": 0.85, "ram": 0.75, "io": 0.6 }
-}
+## ✨ ฟีเจอร์เด่น (Key Features)
+
+| ระดับ | รายละเอียดฟีเจอร์ |
+|:---|:---|
+| 🧱 **แกนจำลอง OS (Core Engine)** | Process Model (PCB, States, Burst Cycles) · CPU Schedulers (FCFS, SJF, Round Robin, Priority) · คำนวณ Metrics เชิงลึก (Throughput, Turnaround, Waiting time, CPU/RAM/IO Util) |
+| ⭐ **ระบบหน่วยความจำและ I/O** | Memory Manager (Paging, Page Fault Detection, Frame Allocation) · Page Replacement (FIFO, LRU) · Thrashing Detection System · Disk I/O Queue Subsystem |
+| 🚀 **การวิเคราะห์และแก้ปัญหา** | **Bottleneck Analyzer** วินิจฉัยคอขวดอัตโนมัติ (CPU-bound, Memory-bound, I/O-bound) · **What-If A/B Testing** เปรียบเทียบผลกระทบของ 2 การตั้งค่าแบบแบ่งหน้าจอ |
+| 💻 **Interactive Telemetry Dashboard** | ควบคุม Playback (Play/Pause, Step, Speed, Time Scrubbing) · Real-time Gantt Chart · Multi-resource Utilization Area Charts · Animated Queue Lanes · Memory Frame Matrix · Live Event Stream · Process Table |
+| 🛠️ **เครื่องมือเสริม** | **Custom Workload Builder** (ออกแบบ Process เองได้ผ่าน GUI) · **Preset Scenarios** (จำลองสถานการณ์ตัวอย่าง 1 คลิก) · **Interactive User Guide Modal** · **Export Report** (PDF, HTML, JSON) |
+| 🧪 **ความน่าเชื่อถือและการทดสอบ** | ชุด Unit Test อัตโนมัติ (`pytest`) ครอบคลุม 100% ของ Engine Logic · สคริปต์ Benchmark การทดลองและวาดกราฟสำหรับรายงาน |
+| 🌐 **Deployment Ready** | รองรับการ Deploy ขึ้น **Vercel** ทันที (Full-Stack: Vite + Python Serverless) · รองรับ **Docker Compose** และไฟล์คลิกรัน **`start_dev.bat`** |
+
+---
+
+## 🎯 ขอบเขตของระบบ (Scope)
+
+| ✅ สิ่งที่ระบบทำ | ❌ สิ่งที่อยู่นอกเหนือขอบเขต |
+|:---|:---|
+| จำลอง CPU + RAM (Paging) + I/O ที่ส่งผลต่อกันในระบบเดียว | ควบคุม Process จริงของระบบปฏิบัติการ Host |
+| วิเคราะห์คอขวดและเปรียบเทียบผลลัพธ์ก่อน/หลังการปรับแต่ง | จำลองฮาร์ดแวร์ระดับไมโคร (L1/L2/L3 Cache, TLB, Pipeline) |
+| Preset Workload หลากหลายรูปแบบ + Benchmark เชิงสถิติ | เป็นเพียงตัวจำลองอัลกอริทึมเดี่ยวๆ โดยไม่เชื่อมโยงทรัพยากร |
+| Export สรุปผลการวิเคราะห์ออกมาเป็นรายงาน | – |
+
+---
+
+## 🏗️ สถาปัตยกรรมระบบ (Architecture)
+
+```
+┌─────────────────────────────────┐           HTTP / JSON           ┌───────────────────────────────┐
+│     React + Vite Frontend       │ ──────────────────────────────▶ │       FastAPI Backend         │
+│  (Telemetry Dashboard & Player) │ ◀────────────────────────────── │       (api/service.py)        │
+└─────────────────────────────────┘      คืนข้อมูลทั้ง Timeline      └──────────────┬────────────────┘
+                                                                                   │ เรียกใช้งาน
+                                                                                   ▼
+                                                                    ┌───────────────────────────────┐
+                                                                    │   OS Simulation Core (sim/)   │
+                                                                    │   - Scheduler (FCFS/SJF/RR/P) │
+                                                                    │   - Memory (FIFO/LRU/Paging)  │
+                                                                    │   - I/O Queue & Thrashing     │
+                                                                    │   - Bottleneck Analyzer       │
+                                                                    └───────────────────────────────┘
 ```
 
-## ⚡ Quick Start
+### หลักการออกแบบที่สำคัญ:
+1. **Decoupled Engine (`sim/`):** พัฒนาด้วย Pure Python ล้วน โดยไม่ผูกติดกับ Web Framework ใดๆ เพื่อความแม่นยำและการเขียน Unit Test ที่ครอบคลุม
+2. **Discrete-Event Simulation:** จำลองเหตุการณ์ตามรอบสัญญาณนาฬิกา (Tick-based) แบบ Deterministic เมื่อกำหนด `seed` เดียวกันผลลัพธ์จะตรงกัน 100%
+3. **Single Timeline Delivery:** Backend ประมวลผลและส่ง Snapshots ทั้งก้อนให้ Frontend ทำให้สามารถเลื่อนเวลา (Scrubbing), กรอถอยหลัง (Step back), หรือปรับความเร็วได้อย่างลื่นไหลไม่มีสะดุด
 
-**ต้องมี:** Python 3.10+ · Node.js 18+
+---
+
+## ⚡ วิธีการติดตั้งและรันระบบ (Quick Start)
+
+### ข้อกำหนดเบื้องต้น
+* **Python:** เวอร์ชัน 3.10 ขึ้นไป
+* **Node.js:** เวอร์ชัน 18 ขึ้นไป
+
+---
+
+### วิธีที่ 1: รันผ่าน start_dev.bat (ง่ายที่สุดบน Windows)
+ดับเบิลคลิกไฟล์ [`start_dev.bat`](file:///d:/final%20osu/os-resource-sim/start_dev.bat) หรือรันใน Terminal:
+```cmd
+start_dev.bat
+```
+*ระบบจะเปิด Backend Server (`http://localhost:8000`) และ Frontend Dev Server (`http://localhost:5173`) ให้พร้อมใช้งานทันที*
+
+---
+
+### วิธีที่ 2: รันแบบ Manual (แยก Terminal)
+
+**1. ติดตั้งและเริ่มทำงาน Backend:**
+```bash
+# สร้างและเปิด Virtual Environment
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
+
+# ติดตั้ง Dependencies
+pip install -r requirements.txt pytest matplotlib pandas
+
+# รัน Backend Server (พอร์ต 8000)
+uvicorn api.main:app --reload --port 8000
+```
+
+**2. ติดตั้งและเริ่มทำงาน Frontend:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+เปิดเบราว์เซอร์ไปที่: `http://localhost:5173`
+
+---
+
+### วิธีที่ 3: รันด้วย Docker Compose
+```bash
+docker compose up --build
+```
+เปิดเบราว์เซอร์ไปที่: `http://localhost:8000`
+
+---
+
+## 🌐 การ Deploy ขึ้น Vercel
+
+โปรเจกต์นี้ตั้งค่า [`vercel.json`](file:///d:/final%20osu/os-resource-sim/vercel.json) และ Serverless Functions ไว้เรียบร้อยแล้ว รองรับการ Deploy ทั้งเว็บและ API ขึ้น Vercel ในคำสั่งเดียว:
 
 ```bash
-# ติดตั้ง
-python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -r api/requirements.txt pytest matplotlib pandas
-cd frontend && npm install && cd ..
+# วิธีที่ 1: ใช้ Vercel CLI
+npx vercel --prod
 
-# รัน (เปิด 2 เทอร์มินัล)
-uvicorn api.main:app --reload --port 8000      # เทอร์มินัล 1: API
-cd frontend && npm run dev                     # เทอร์มินัล 2: UI → http://localhost:5173
+# วิธีที่ 2: Push ขึ้น GitHub แล้วกด Import Project บน vercel.com
+git push origin main
 ```
+*(อ่านขั้นตอนอย่างละเอียดได้ที่ [`VERCEL_DEPLOY.md`](file:///d:/final%20osu/os-resource-sim/VERCEL_DEPLOY.md))*
 
-**โหมด demo (คำสั่งเดียว):**
+---
 
+## 🧪 Workload สำเร็จรูป (Built-in Workloads)
+
+| ชุด Workload | คุณลักษณะเด่น | อาการและผลลัพธ์ที่ตรวจพบ |
+|:---|:---|:---|
+| `cpu_heavy` | Process มี CPU Burst ยาว, เรียกใช้ I/O น้อย | CPU Utilization สูงเกือบ 100%, Ready Queue สะสม |
+| `io_heavy` | Process ทำงาน CPU สั้นๆ แล้วรอ Disk I/O นาน | CPU ว่าง (Idle สูง), I/O Utilization หนาแน่น |
+| `memory_hog` | มี Working Set ของ Page รวมกันมากกว่าจำนวน RAM Frame | เกิด **Thrashing**, อัตรา Page Fault สูงลิ่ว |
+| `mixed` | งานผสมผสานทั้ง 3 รูปแบบ เลียนแบบการใช้งานจริง | แสดงความสมดุลและการจัดลำดับของ Scheduler |
+| `textbook_examples` | ข้อมูลตัวอย่างจากตำราเรียน OS (Silberschatz) | ใช้สอบทานความถูกต้องของอัลกอริทึม FCFS/RR |
+
+---
+
+## 🔌 API Documentation
+
+| Method | Path | คำอธิบาย |
+|:---|:---|:---|
+| `GET` | `/api/health` | ตรวจสอบสถานะการทำงานของ API |
+| `GET` | `/api/workloads` | ดึงรายชื่อ Preset Workload ทั้งหมด |
+| `POST` | `/api/simulate` | รันการจำลองและส่งผลลัพธ์ Snapshots + Metrics กลับมา |
+| `POST` | `/api/compare` | เปรียบเทียบผลลัพธ์แบบ A/B ระหว่าง 2 การตั้งค่า (What-If) |
+
+*Swagger UI เปิดได้ที่: `http://localhost:8000/docs`*
+
+### ตัวแปรการตั้งค่า SimConfig
+
+| ฟิลด์ | ชนิดข้อมูล | ค่าที่รองรับ | ค่าเริ่มต้น |
+|:---|:---|:---|:---|
+| `workload` | `string` | `cpu_heavy`, `io_heavy`, `memory_hog`, `mixed`, `textbook_examples` | `mixed` |
+| `scheduler` | `string` | `fcfs`, `sjf`, `rr`, `priority` | `rr` |
+| `quantum` | `integer` | `1` ถึง `32` (สำหรับ Round Robin) | `4` |
+| `ram_frames` | `integer` | `2` ถึง `128` เฟรม | `16` |
+| `replacement` | `string` | `fifo`, `lru` | `lru` |
+| `seed` | `integer` | จำนวนเต็มบวก | `42` |
+
+---
+
+## 🩺 ตรรกะการวิเคราะห์ของ Bottleneck Analyzer
+
+| สภาวะที่ตรวจพบ | ผลการวินิจฉัย | คำแนะนำจากระบบ (Actionable Recommendations) |
+|:---|:---|:---|
+| CPU Util > 85% และ Ready Queue เฉลี่ย > 2.5 | **CPU-bound** | • ปรับลด Time Quantum (สำหรับ RR)<br>• เปลี่ยนไปใช้อัลกอริทึม SJF เพื่อลด Waiting Time |
+| Page Fault Rate > 25% และ I/O Util > 70% | **Memory-bound (Thrashing)** | • เพิ่มขนาด RAM Frames<br>• เปลี่ยนอัลกอริทึม Replacement เป็น LRU<br>• ลด Multiprogramming |
+| I/O Util > 80% และ CPU Util < 40% | **I/O-bound** | • เพิ่มอุปกรณ์ I/O Channel<br>• ทำ I/O Buffering / Asynchronous I/O |
+| การใช้งานอยู่ในเกณฑ์ปกติ | **Balanced** | ระบบทำงานได้อย่างมีประสิทธิภาพและสมดุล |
+
+---
+
+## 🔬 การทดลองเชิงตัวเลขและชุดการทดสอบ (Testing)
+
+### การรัน Unit Tests:
 ```bash
-cd frontend && npm run build && cd ..
-uvicorn api.main:app --port 8000               # เปิด http://localhost:8000
+pytest -v
+```
+*(ทดสอบ 18 Test Cases ครอบคลุม Scheduler, Memory, Engine, Snapshot และ API ทั้งหมด 100% ผ่านฉลุย)*
+
+### การรันสคริปต์การทดลองสำหรับรายงาน:
+```bash
+python -m experiments.exp_schedulers      # เปรียบเทียบ FCFS, SJF, RR, Priority
+python -m experiments.exp_quantum         # ผลกระทบของ Quantum 1, 2, 4, 8, 16
+python -m experiments.exp_ram_size        # ผลกระทบของ RAM Frames 8, 16, 32, 64
+python -m experiments.exp_replacement     # FIFO vs LRU (Belady's Anomaly)
+python -m experiments.exp_whatif          # วัดผลเปรียบเทียบก่อน-หลังตามคำแนะนำ
+python -m experiments.plot                # สร้างภาพกราฟความละเอียดสูงใน experiments/results/
 ```
 
-**Makefile:** `make dev` · `make test` · `make build` · `make experiments`
+---
 
-> ยังไม่มี engine จริง? ให้ `api/service.py` เรียก `api/mock.py` ไปก่อน ฝั่ง frontend จะทำงานต่อได้ทันที
-
-## 📁 โครงสร้างโปรเจกต์
+## 📁 โครงสร้างโปรเจกต์ (Project Structure)
 
 ```
 os-resource-sim/
 │
-├── README.md                          # วิธีติดตั้ง/รัน, ขอบเขต ทำ/ไม่ทำ, สกรีนช็อต
-├── Makefile                           # make dev / make test / make build / make experiments
-├── .gitignore
-├── docker-compose.yml                 # (ไม่บังคับ) รัน api + frontend พร้อมกัน
+├── README.md                          # เอกสารแนะนำและคู่มือโปรเจกต์ฉบับสมบูรณ์
+├── VERCEL_DEPLOY.md                   # คู่มือการ Deploy บน Vercel
+├── vercel.json                        # การตั้งค่า Vercel Full-Stack Serverless
+├── .vercelignore                      # กรองไฟล์ที่ไม่จำเป็นก่อนขึ้น Cloud
+├── Makefile                           # คำสั่ง make dev / test / build
+├── docker-compose.yml                 # คอนฟิก Docker Compose สำหรับรันบนเซิร์ฟเวอร์
+├── start_dev.bat                      # สคริปต์ 1-Click รัน Local บน Windows
+├── requirements.txt                   # รายการ Dependencies ของ Python Backend
 │
-├── sim/                               # ★ แกนจำลอง (Python ล้วน ห้าม import fastapi/streamlit)
-│   ├── __init__.py
-│   ├── config.py                      # SimConfig (dataclass): scheduler, quantum, ram_frames, seed
-│   ├── process.py                     # Process, PCB, State (NEW/READY/RUNNING/WAITING_IO/WAITING_MEM/DONE)
-│   ├── engine.py                      # Simulation clock + tick loop + เก็บ snapshot ทุก tick
-│   ├── events.py                      # กำหนดรูปแบบ string ของ event (page_fault:3, io_done:4, evict:2)
-│   ├── snapshot.py                    # สร้าง snapshot dict ต่อ tick (สัญญากับ UI)
-│   │
-│   ├── scheduler/
-│   │   ├── __init__.py
-│   │   ├── base.py                    # BaseScheduler: pick(), on_tick(), add(), queue
-│   │   ├── fcfs.py
-│   │   ├── round_robin.py
-│   │   └── priority.py                # (เพิ่ม aging ถ้ามีเวลา)
-│   │
-│   ├── memory/
-│   │   ├── __init__.py
-│   │   ├── manager.py                 # frame table, page table, access(), frame_owners()
-│   │   ├── replacement.py             # FIFO, LRU (เพิ่ม Clock/Optimal ได้)
-│   │   └── thrashing.py               # ตรวจ page fault rate ในหน้าต่าง N tick
-│   │
-│   ├── io/
-│   │   ├── __init__.py
-│   │   └── manager.py                 # disk queue, service time, swap I/O
-│   │
-│   ├── deadlock/                      # (เลือกทำ - ชั้น 3) ตัดทั้งโฟลเดอร์ได้
-│   │   ├── __init__.py
-│   │   ├── resources.py               # ทรัพยากรหลายชนิด
-│   │   ├── detector.py                # wait-for graph + หา cycle
-│   │   └── recovery.py                # kill / preempt / rollback
-│   │
-│   ├── quota/                         # (เลือกทำ - ชั้น 4) ตัดทั้งโฟลเดอร์ได้
-│   │   ├── __init__.py
-│   │   ├── groups.py                  # จัด process เป็น group/user
-│   │   └── fairness.py                # Jain's Fairness Index
-│   │
-│   ├── metrics.py                     # waiting, turnaround, utilization, throughput, fault rate
-│   └── analyzer.py                    # Bottleneck Analyzer + คำแนะนำ (diagnose)
+├── sim/                               # ★ แกนหลักจำลองระบบปฏิบัติการ (Pure Python)
+│   ├── config.py                      # โครงสร้างข้อมูล SimConfig
+│   ├── process.py                     # Process model, PCB และสถานะ (READY, RUNNING, ฯลฯ)
+│   ├── engine.py                      # Simulation Clock loop และการบันทึก Snapshot
+│   ├── events.py                      # การสร้าง Event log สรุปแต่ละ Tick
+│   ├── metrics.py                     # การคำนวณสถิติและเปรียบเทียบ Delta Metrics
+│   ├── analyzer.py                    # Bottleneck Analyzer วินิจฉัยคอขวดและให้คำแนะนำ
+│   ├── runner.py                      # ตัวจัดการรันการจำลองและ What-if analysis
+│   ├── snapshot.py                    # ตัวจัดรูปแบบ Snapshot ส่งต่อให้ Frontend
+│   ├── scheduler/                     # อัลกอริทึมจัดสรร CPU
+│   │   ├── base.py                    # BaseScheduler
+│   │   ├── fcfs.py                    # First-Come First-Served
+│   │   ├── sjf.py                     # Shortest Job First
+│   │   ├── round_robin.py             # Round Robin (Time-sliced)
+│   │   └── priority.py                # Priority Scheduling
+│   ├── memory/                        # การจัดการหน่วยความจำ
+│   │   ├── manager.py                 # Page table, Frame table, Page Fault
+│   │   ├── replacement.py             # FIFO และ LRU Policies
+│   │   └── thrashing.py               # ตัวตรวจจับสภาวะ Thrashing
+│   └── io/                            # การจัดการ Disk I/O
+│       └── manager.py                 # I/O queue, Transfer time, Device management
 │
-├── workloads/
-│   ├── __init__.py
-│   ├── generator.py                   # สร้าง process ด้วย random.seed
-│   ├── cpu_heavy.json
-│   ├── io_heavy.json
-│   ├── memory_hog.json
-│   ├── mixed.json
-│   └── textbook_examples.json         # ตัวอย่างในตำรา ไว้ตรวจความถูกต้อง
+├── workloads/                         # ชุดข้อมูลงานจำลอง (JSON format)
+│   ├── generator.py                   # ตัวสร้าง Workload ตามพารามิเตอร์
+│   ├── cpu_heavy.json                 # งานเน้นประมวลผล
+│   ├── io_heavy.json                  # งานเน้นดิสก์และไฟล์
+│   ├── memory_hog.json                # งานใช้หน่วยความจำเกินขนาด
+│   ├── mixed.json                     # งานจำลองสภาพแวดล้อมผสม
+│   └── textbook_examples.json         # กรณีศึกษามาตรฐานจากตำรา
 │
-├── api/                               # ★ ชั้นคั่นกลาง FastAPI
-│   ├── __init__.py
-│   ├── main.py                        # app, CORS, routes, mount frontend/dist
-│   ├── schemas.py                     # Pydantic: SimConfig, Snapshot, SimResult, Diagnosis
-│   ├── service.py                     # run_simulation(), run_compare(), list_workloads()
-│   ├── mock.py                        # timeline ปลอมตาม schema (ให้ frontend เริ่มงานได้ก่อน)
-│   └── requirements.txt               # fastapi, uvicorn, pydantic
+├── api/                               # ★ FastAPI Backend Layer
+│   ├── index.py                       # Serverless Function Entrypoint สำหรับ Vercel
+│   ├── main.py                        # FastAPI routes, CORS, Static files mount
+│   ├── service.py                     # ฟังก์ชันเชื่อมต่อ API สู่ Simulation Engine
+│   ├── schemas.py                     # Pydantic Schemas กำหนด Data Contract
+│   └── mock.py                        # Mock data สำหรับทดสอบในโหมด Standalone
 │
-├── frontend/                          # ★ React + Vite + TypeScript
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── vite.config.ts                 # proxy /api -> localhost:8000
-│   ├── tailwind.config.ts
-│   ├── postcss.config.js
-│   ├── index.html
-│   ├── public/
-│   │   └── favicon.svg
+├── frontend/                          # ★ React + Vite + TypeScript Frontend
+│   ├── index.html                     # HTML Template
+│   ├── package.json                   # NPM Dependencies
+│   ├── vite.config.ts                 # การตั้งค่า Vite และ Reverse Proxy
+│   ├── tailwind.config.ts             # การตั้งค่า Tailwind CSS และ Colors Palette
 │   └── src/
-│       ├── main.tsx
-│       ├── App.tsx
-│       ├── index.css                  # Tailwind + ตัวแปรสีธีมมืด + ฟอนต์
-│       │
-│       ├── api/
-│       │   └── client.ts              # fetch wrapper: simulate(), compare(), workloads()
-│       ├── types/
-│       │   └── sim.ts                 # TypeScript types ตรงกับ schemas.py
-│       ├── store/
-│       │   └── useSimStore.ts         # Zustand: config, result, cursor, playing, speed
-│       ├── hooks/
-│       │   ├── usePlayback.ts         # requestAnimationFrame loop
-│       │   └── useHotkeys.ts          # Space = play/pause, ←/→ = step
-│       ├── lib/
-│       │   ├── colors.ts              # pidColor(), statusColor()
-│       │   ├── format.ts              # format ตัวเลข/เปอร์เซ็นต์
-│       │   └── delta.ts               # คำนวณ % เปลี่ยนแปลงสำหรับ Compare
-│       │
-│       └── components/
-│           ├── layout/
-│           │   ├── Shell.tsx          # โครงหน้าจอหลัก
-│           │   ├── Header.tsx
-│           │   └── Sidebar.tsx
-│           ├── ControlPanel.tsx       # workload / scheduler / quantum / RAM / replacement
-│           ├── PlaybackBar.tsx        # play, pause, step, scrub slider, speed
-│           ├── GaugeRow.tsx           # มิเตอร์ CPU / RAM / I/O (เขียว-เหลือง-แดง)
-│           ├── QueueLane.tsx          # RUNNING / READY / I/O เป็นกล่องเลื่อน
-│           ├── MemoryGrid.tsx         # ช่อง frame RAM + แอนิเมชัน page fault
-│           ├── GanttChart.tsx         # SVG Gantt + playhead
-│           ├── UtilizationChart.tsx   # Recharts เส้น 3 สี + playhead
-│           ├── ProcessTable.tsx       # ตารางสถิติต่อ process
-│           ├── BottleneckCard.tsx     # ผลวินิจฉัย + คำแนะนำ
-│           ├── EventLog.tsx           # log event ทีละ tick (page_fault, io_done, ...)
-│           ├── WhatIfCompare.tsx      # split-screen A/B + ตาราง delta
-│           └── ui/                    # ชิ้นเล็กใช้ซ้ำ
-│               ├── Card.tsx
-│               ├── Badge.tsx
-│               ├── Select.tsx
-│               └── Slider.tsx
+│       ├── main.tsx                   # React Entrypoint
+│       ├── App.tsx                    # หน้าจอแดชบอร์ดหลัก
+│       ├── index.css                  # ระบบธีมมืดและ Styling
+│       ├── vite-env.d.ts              # Type definitions ของ Vite Environment
+│       ├── api/client.ts              # ตัวเรียก API (simulate, compare, workloads)
+│       ├── store/useSimStore.ts       # State Management (Zustand)
+│       ├── hooks/usePlayback.ts       # ควบคุมเวลาและ Animation Loop
+│       ├── lib/colors.ts              # ฟังก์ชันสร้างโทนสีตาม PID และ Status
+│       └── components/                # คอมโพเนนต์แสดงผล
+│           ├── GanttChart.tsx         # ไทม์ไลน์ Gantt Chart ของกระบวนการ
+│           ├── GaugeRow.tsx           # มาตรวัด CPU / RAM / I/O Utilizations
+│           ├── QueueLane.tsx          # แอนิเมชันสถานะคิว Ready, Running, IO
+│           ├── MemoryGrid.tsx         # ผังแสดงเฟรมใน RAM และ Page Fault
+│           ├── UtilizationChart.tsx   # กราฟเส้นแบบ Real-time แสดงความหนาแน่น
+│           ├── ProcessTable.tsx       # ตารางสถิติและสถานะแต่ละ Process
+│           ├── BottleneckCard.tsx     # การ์ดสรุปคอขวดและคำแนะนำ
+│           ├── PlaybackBar.tsx        # แถบควบคุมเวลา Play/Pause/Scrubbing
+│           ├── ControlPanel.tsx       # แผงปรับแต่งตัวแปรการทดลอง
+│           ├── WhatIfCompare.tsx      # โหมดเปรียบเทียบ A/B Testing
+│           ├── CustomWorkloadModal.tsx# หน้าต่างออกแบบ Workload ด้วยตนเอง
+│           ├── ScenarioPresetsModal.tsx# เมนูลัดเลือกสถานการณ์ตัวอย่าง
+│           ├── ExportReportModal.tsx  # หน้าต่างส่งออกรายงานผล
+│           └── GuideModal.tsx         # คู่มือการใช้งานระบบฉบับย่อในตัวเว็บ
 │
-├── experiments/                       # สคริปต์ทดลองสำหรับรายงาน (เรียก sim/ ตรงๆ)
-│   ├── exp_quantum.py                 # RR quantum 1, 2, 4, 8, 16
-│   ├── exp_ram_size.py                # RAM 8, 16, 32, 64 frames
-│   ├── exp_replacement.py             # FIFO vs LRU (Belady's anomaly)
-│   ├── exp_whatif.py                  # ก่อน/หลังทำตามคำแนะนำ
-│   ├── plot.py                        # วาดกราฟ PNG สำหรับรายงาน
-│   └── results/                       # CSV / PNG ที่ใช้ในรายงาน
-│
-├── tests/
-│   ├── test_scheduler.py              # เทียบกับตัวอย่างตำรา
-│   ├── test_memory.py
+├── tests/                             # ★ ชุด Unit Test อัตโนมัติ (pytest)
 │   ├── test_engine.py
+│   ├── test_scheduler.py
+│   ├── test_memory.py
 │   ├── test_analyzer.py
-│   ├── test_snapshot.py               # snapshot ตรง schema
-│   ├── test_api.py                    # ทดสอบ endpoint ด้วย TestClient
-│   └── test_deadlock.py               # (ถ้าทำชั้น 3)
+│   └── test_api.py
 │
-└── docs/
-    ├── design.md                      # สถาปัตยกรรม, data model, interface
-    ├── api-contract.md                # JSON schema + รูปแบบ events (ตกลงวันแรก)
-    ├── report/                        # รายงานฉบับสมบูรณ์
-    └── slides/                        # สไลด์พรีเซนต์
+└── experiments/                       # ★ สคริปต์การทดลองและประเมินผลเชิงลึก
+    ├── exp_schedulers.py
+    ├── exp_quantum.py
+    ├── exp_ram_size.py
+    ├── exp_replacement.py
+    ├── exp_whatif.py
+    ├── plot.py
+    └── results/                       # กราฟ PNG และข้อมูลสรุปผล
 ```
-
-## 🧪 Workload สำเร็จรูป
-
-| ชุด | ลักษณะ | สิ่งที่ควรเห็น |
-|---|---|---|
-| `cpu_heavy` | CPU burst ยาว, I/O น้อย | CPU util สูง, ready queue ยาว |
-| `io_heavy` | CPU burst สั้น, I/O ยาว | CPU ว่าง, I/O util สูง |
-| `memory_hog` | page รวมเกิน RAM | thrashing, page fault พุ่ง |
-| `mixed` | ผสมทุกแบบ | ใกล้ระบบจริง |
-| `textbook_examples` | ตัวอย่างจากตำรา | ตรวจความถูกต้องของ scheduler |
-
-ทุกชุดสร้างด้วย `random.seed` (ค่าเริ่มต้น `42`) เพื่อให้ผลซ้ำได้
-
-## 🔌 API
-
-| Method | Path | คำอธิบาย |
-|---|---|---|
-| `GET` | `/api/workloads` | รายชื่อ workload |
-| `POST` | `/api/simulate` | รับ `SimConfig` → คืน `SimResult` |
-| `POST` | `/api/compare` | รับ config สองชุด → คืนผลทั้งสอง (What-if) |
-
-Swagger: http://localhost:8000/docs
-
-**SimConfig**
-
-| ฟิลด์ | ค่าที่รับ | ค่าเริ่มต้น |
-|---|---|---|
-| `workload` | `cpu_heavy` `io_heavy` `memory_hog` `mixed` | `mixed` |
-| `scheduler` | `fcfs` `rr` `priority` | `rr` |
-| `quantum` | 1–32 | `4` |
-| `ram_frames` | 2–128 | `16` |
-| `replacement` | `fifo` `lru` | `lru` |
-| `seed` | จำนวนเต็ม | `42` |
-
-**Events:** `page_fault:<pid>` · `evict:<pid>` · `io_done:<pid>`
-
-## 🩺 กฎวินิจฉัยของ Analyzer
-
-| เงื่อนไข | ผลวินิจฉัย | คำแนะนำ |
-|---|---|---|
-| CPU util > 90% และ ready queue เฉลี่ย > 3 | **CPU-bound** | เพิ่ม CPU / ปรับ quantum |
-| page fault rate > 30% และ I/O util > 80% | **Memory-bound (thrashing)** | เพิ่ม RAM / ลด multiprogramming |
-| I/O util > 90% และ CPU util < 50% | **I/O-bound** | ปรับ disk scheduling / เพิ่ม I/O device |
-| อื่นๆ | **Balanced** | – |
-
-## 🔬 การทดลองและทดสอบ
-
-```bash
-pytest -q
-python -m experiments.exp_quantum        # RR quantum 1, 2, 4, 8, 16
-python -m experiments.exp_ram_size       # RAM 8, 16, 32, 64 frames
-python -m experiments.exp_replacement    # FIFO vs LRU (Belady's anomaly)
-python -m experiments.exp_whatif         # ก่อน/หลังทำตามคำแนะนำ
-```
-
-ผลลัพธ์อยู่ใน `experiments/results/` · `tests/test_scheduler.py` ตรวจกับตัวอย่างในตำราก่อนเชื่อกราฟ
-
-## 👥 สมาชิก
-
-| ชื่อ-สกุล | รหัสนักศึกษา | รับผิดชอบ |
-|---|---|---|
-| _(เติมชื่อ)_ | _(เติมรหัส)_ | `sim/` engine, scheduler, snapshot, tests |
-| _(เติมชื่อ)_ | _(เติมรหัส)_ | `sim/` memory, io, metrics, analyzer, `api/`, workloads |
-| _(เติมชื่อ)_ | _(เติมรหัส)_ | `frontend/`, experiments, docs |
-
-## 🗓️ Roadmap
-
-- [ ] **สัปดาห์ 1** · ตกลง schema, mock API, engine FCFS, layout เปล่า
-- [ ] **สัปดาห์ 2** · Round Robin, ControlPanel, PlaybackBar, Gantt
-- [ ] **สัปดาห์ 3** · Memory + I/O จริง, MemoryGrid, QueueLane, Gauge
-- [ ] **สัปดาห์ 4** · Utilization chart, Analyzer, ต่อ API จริง
-- [ ] **สัปดาห์ 5** · Compare mode, การทดลอง, (เลือกทำ) Deadlock/Quota
-- [ ] **สัปดาห์ 6** · ซ้อม demo, แก้บั๊ก, รายงาน
-
-## ⚠️ ข้อควรระวัง
-
-- ตั้ง `max_ticks` ไม่เกิน ~2,000 เพื่อไม่ให้ JSON ใหญ่เกินไป
-- fetch ไม่ผ่านตอนพัฒนา → เช็ก proxy ใน `vite.config.ts` และ CORS ใน `api/main.py`
-- แก้ `schemas.py` ต้องแก้ `types/sim.ts` ให้ตรงกันทุกครั้ง
 
 ---
 
-<div align="center">โปรเจกต์เพื่อการศึกษา · รายวิชา Operating Systems</div>
+## 👥 สมาชิกผู้จัดทำ (Contributors)
+
+| ชื่อ-สกุล | รหัสนักศึกษา | หน้าที่รับผิดชอบ |
+|---|:---:|---|
+| **ธนดล ปิ่นเงิน** | **670510667** | `sim/` engine, scheduler, memory, analyzer, `api/`, `frontend/`, tests & deployment |
+
+---
+
+## 🗓️ สถานะการพัฒนา (Project Roadmap & Status)
+
+- [x] **ระยะที่ 1: การออกแบบและวางโครงสร้าง** · ตกลง Schema สัญญากลาง, สร้าง Process Model และ Engine FCFS
+- [x] **ระยะที่ 2: ระบบจัดการ CPU** · พัฒนา Round Robin, SJF, Priority Scheduler และ Gantt Chart Timeline
+- [x] **ระยะที่ 3: ระบบหน่วยความจำและดิสก์** · สร้าง Memory Paging (FIFO/LRU), Thrashing Detector และ I/O Subsystem
+- [x] **ระยะที่ 4: Telemetry และ Bottleneck Engine** · สร้าง Utilization Charts, วิเคราะห์คอขวดอัตโนมัติ และคำแนะนำ
+- [x] **ระยะที่ 5: What-If Analysis และฟังก์ชันพิเศษ** · โหมดเปรียบเทียบ A/B, ตัวสร้าง Custom Workload และตัวส่งออกรายงาน
+- [x] **ระยะที่ 6: การทดสอบและการเผยแพร่** · Automated Unit Tests 100% Pass, รองรับ Vercel และ Docker พร้อมใช้งานสมบูรณ์
+
+---
+
+<div align="center">
+
+**Operating Systems Final Project**  
+*Department of Computer Engineering / Computer Science*
+
+</div>

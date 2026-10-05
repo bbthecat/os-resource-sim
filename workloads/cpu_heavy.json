@@ -1,0 +1,13 @@
+{
+  "name": "cpu_heavy",
+  "description": "งานใช้ CPU เป็นหลัก RAM เพียงพอ -> คาดว่า CPU-bound",
+  "config": {"scheduler": "rr", "quantum": 4, "ram_frames": 32},
+  "processes": [
+    {"pid": 1, "arrival": 0, "priority": 4, "bursts": [["cpu", 21], ["io", 1], ["cpu", 16]], "pages": 3},
+    {"pid": 2, "arrival": 3, "priority": 1, "bursts": [["cpu", 22], ["io", 2], ["cpu", 24], ["io", 1], ["cpu", 13]], "pages": 3},
+    {"pid": 3, "arrival": 1, "priority": 5, "bursts": [["cpu", 21], ["io", 1], ["cpu", 23], ["io", 2], ["cpu", 16]], "pages": 2},
+    {"pid": 4, "arrival": 1, "priority": 4, "bursts": [["cpu", 12], ["io", 1], ["cpu", 12], ["io", 1], ["cpu", 18]], "pages": 2},
+    {"pid": 5, "arrival": 4, "priority": 2, "bursts": [["cpu", 24], ["io", 2], ["cpu", 19]], "pages": 3},
+    {"pid": 6, "arrival": 3, "priority": 3, "bursts": [["cpu", 22], ["io", 1], ["cpu", 24]], "pages": 2}
+  ]
+}

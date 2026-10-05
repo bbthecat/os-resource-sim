@@ -1,0 +1,9 @@
+{
+  "workload": "mixed",
+  "suggested_changes": {
+    "ram_frames": 12
+  },
+  "before_turnaround": 214.83333333333334,
+  "after_turnaround": 171.0,
+  "improvement_pct": -20.40341349883631
+}

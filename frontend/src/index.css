@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-slate-700 min-h-screen font-sans overflow-x-hidden;
+    /* Soft pastel animated background */
+    background: linear-gradient(-45deg, #fcfaf9, #fdf3b8, #f8a5c2, #9adcfb);
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@keyframes gradientBG {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes float {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(5deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+/* Custom modern scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/60 backdrop-blur-xl border border-white shadow-[0_8px_32px_0_rgba(154,220,251,0.2)];
+  }
+  
+  .blob-shape {
+    @apply absolute rounded-full mix-blend-multiply filter blur-2xl opacity-60 pointer-events-none;
+    animation: float 8s ease-in-out infinite;
+  }
+}

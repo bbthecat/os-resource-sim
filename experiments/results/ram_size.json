@@ -1,0 +1,26 @@
+[
+  {
+    "ram_frames": 8,
+    "page_fault_rate": 0.2610294117647059,
+    "thrashing_fraction": 0.5813953488372093,
+    "cpu_util": 0.5193798449612403
+  },
+  {
+    "ram_frames": 16,
+    "page_fault_rate": 0.1483050847457627,
+    "thrashing_fraction": 0.008403361344537815,
+    "cpu_util": 0.8445378151260504
+  },
+  {
+    "ram_frames": 32,
+    "page_fault_rate": 0.1222707423580786,
+    "thrashing_fraction": 0.008583690987124463,
+    "cpu_util": 0.8626609442060086
+  },
+  {
+    "ram_frames": 64,
+    "page_fault_rate": 0.1222707423580786,
+    "thrashing_fraction": 0.008583690987124463,
+    "cpu_util": 0.8626609442060086
+  }
+]

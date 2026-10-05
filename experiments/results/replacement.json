@@ -1,0 +1,23 @@
+[
+  {
+    "policy": "FIFO",
+    "page_faults": 38,
+    "page_fault_rate": 0.1589958158995816,
+    "thrashing_fraction": 0.12890625,
+    "turnaround": 233.16666666666666
+  },
+  {
+    "policy": "LRU",
+    "page_faults": 35,
+    "page_fault_rate": 0.1483050847457627,
+    "thrashing_fraction": 0.008403361344537815,
+    "turnaround": 221.16666666666666
+  },
+  {
+    "policy": "CLOCK",
+    "page_faults": 35,
+    "page_fault_rate": 0.1483050847457627,
+    "thrashing_fraction": 0.008403361344537815,
+    "turnaround": 216.83333333333334
+  }
+]
