@@ -1,0 +1,22 @@
+# node_modules
+node_modules/
+dist/
+build/
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+
+# pytest
+.pytest_cache/
+.coverage
+
+# IDE
+.vscode/
+.idea/
+*.swp
