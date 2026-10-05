@@ -1,0 +1,13 @@
+{
+  "name": "mixed",
+  "description": "ผสมทั้ง 3 แบบ ใช้ทดสอบภาพรวม",
+  "config": {"scheduler": "rr", "quantum": 4, "ram_frames": 16},
+  "processes": [
+    {"pid": 1, "arrival": 0, "priority": 4, "bursts": [["cpu", 21], ["io", 1], ["cpu", 16]], "pages": 3},
+    {"pid": 2, "arrival": 0, "priority": 4, "bursts": [["cpu", 3], ["io", 9], ["cpu", 1], ["io", 6], ["cpu", 2], ["io", 6], ["cpu", 2], ["io", 9], ["cpu", 3]], "pages": 3},
+    {"pid": 3, "arrival": 0, "priority": 5, "bursts": [["cpu", 10], ["io", 1], ["cpu", 8], ["io", 1], ["cpu", 6]], "pages": 8},
+    {"pid": 4, "arrival": 1, "priority": 4, "bursts": [["cpu", 22], ["io", 1], ["cpu", 18], ["io", 1], ["cpu", 20]], "pages": 3},
+    {"pid": 5, "arrival": 0, "priority": 2, "bursts": [["cpu", 1], ["io", 8], ["cpu", 1], ["io", 11], ["cpu", 1], ["io", 12], ["cpu", 2], ["io", 8], ["cpu", 1], ["io", 9], ["cpu", 3]], "pages": 3},
+    {"pid": 6, "arrival": 1, "priority": 3, "bursts": [["cpu", 11], ["io", 2], ["cpu", 11], ["io", 2], ["cpu", 10]], "pages": 9}
+  ]
+}
