@@ -1,6 +1,7 @@
 from pathlib import Path
 from sim.config import SimConfig
 from sim.runner import run_simulation, run_compare
+from sim.metrics import compare_metrics
 from workloads import list_workloads, load_workload
 
 def get_workloads() -> list[str]:
@@ -36,22 +37,26 @@ def compare(config_a_model, config_b_model) -> dict:
 
     config_dict_b = config_b_model.model_dump()
     workload_name_b = config_dict_b.pop("workload", "mixed")
-    # For compare, usually we compare the same workload, but we load based on config
+    if not workload_name_b.endswith(".json"):
+        workload_name_b += ".json"
+    sim_config_b = SimConfig(**config_dict_b)
     
-    comp = run_compare(workload_name_a, sim_config_a, sim_config_b)
+    out_a = run_simulation(workload_name_a, sim_config_a)
+    out_b = run_simulation(workload_name_b, sim_config_b)
+    delta = compare_metrics(out_a.metrics, out_b.metrics)
     
     return {
         "result_a": {
-            "config": comp["a"].result.config.to_dict(),
-            "snapshots": comp["a"].result.snapshots,
-            "metrics": comp["a"].metrics,
-            "diagnosis": comp["a"].diagnosis.to_dict() if comp["a"].diagnosis else None
+            "config": out_a.result.config.to_dict(),
+            "snapshots": out_a.result.snapshots,
+            "metrics": out_a.metrics,
+            "diagnosis": out_a.diagnosis.to_dict() if out_a.diagnosis else None
         },
         "result_b": {
-            "config": comp["b"].result.config.to_dict(),
-            "snapshots": comp["b"].result.snapshots,
-            "metrics": comp["b"].metrics,
-            "diagnosis": comp["b"].diagnosis.to_dict() if comp["b"].diagnosis else None
+            "config": out_b.result.config.to_dict(),
+            "snapshots": out_b.result.snapshots,
+            "metrics": out_b.metrics,
+            "diagnosis": out_b.diagnosis.to_dict() if out_b.diagnosis else None
         },
-        "delta_metrics": comp["delta"]
+        "delta_metrics": delta
     }
