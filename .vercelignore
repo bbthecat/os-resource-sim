@@ -1,0 +1,12 @@
+.git
+.github
+.pytest_cache
+tests
+experiments
+docs
+Makefile
+docker-compose.yml
+start_dev.bat
+__pycache__
+*.pyc
+node_modules
