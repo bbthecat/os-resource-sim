@@ -1,0 +1,32 @@
+[
+  {
+    "quantum": 1,
+    "avg_waiting": 101.33333333333333,
+    "avg_turnaround": 304.6666666666667,
+    "context_switches": 309
+  },
+  {
+    "quantum": 2,
+    "avg_waiting": 116.0,
+    "avg_turnaround": 291.0,
+    "context_switches": 167
+  },
+  {
+    "quantum": 4,
+    "avg_waiting": 86.5,
+    "avg_turnaround": 303.8333333333333,
+    "context_switches": 114
+  },
+  {
+    "quantum": 8,
+    "avg_waiting": 123.83333333333333,
+    "avg_turnaround": 296.3333333333333,
+    "context_switches": 87
+  },
+  {
+    "quantum": 16,
+    "avg_waiting": 116.33333333333333,
+    "avg_turnaround": 256.1666666666667,
+    "context_switches": 60
+  }
+]

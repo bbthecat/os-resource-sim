@@ -11,3 +11,8 @@ build:
 
 experiments:
 	python -m experiments.exp_quantum
+	python -m experiments.exp_ram_size
+	python -m experiments.exp_replacement
+	python -m experiments.exp_whatif
+	python -m experiments.exp_schedulers
+	python -m experiments.plot

@@ -1,6 +1,3 @@
-<<<<<<< Updated upstream
-# os-resource-sim
-=======
 <div align="center">
 
 # 🖥️ OS Resource Manager Simulator
@@ -33,12 +30,12 @@ RAM ไม่พอ ─▶ page fault เยอะ ─▶ disk I/O หนัก 
 
 | ระดับ | ฟีเจอร์ |
 |---|---|
-| 🧱 **แกนหลัก** | Process model · Scheduler (FCFS, Round Robin, Priority) · Metrics |
-| ⭐ **จุดขาย** | Memory manager (paging, FIFO/LRU) + I/O manager ที่ส่งผลต่อกัน · ตรวจจับ thrashing |
-| 🚀 **เพิ่มคะแนน** | Bottleneck Analyzer + คำแนะนำ · What-if / Compare แบบ A/B |
-| 🎁 **เลือกทำ** | Deadlock detection + recovery **หรือ** Quota & Fairness (Jain's Index) |
+| 🧱 **แกนหลัก** | Process model · Scheduler (FCFS, Round Robin, Priority, SJF) · Metrics |
+| ⭐ **จุดขาย** | Memory manager (FIFO, LRU, Clock/Second Chance) + I/O manager · ตรวจจับ thrashing |
+| 🚀 **เพิ่มคะแนน** | Bottleneck Analyzer + คำแนะนำ · What-if / Compare แบบ A/B · Interactive Preset Scenarios |
+| 🧪 **ความน่าเชื่อถือ** | Automated Test Suite (pytest 18 tests, 100% pass) · Comprehensive Experiments & High-Res Plots |
 
-**Dashboard:** Playback (play/pause/step/scrub) · Gauge CPU/RAM/I/O · Queue lanes · Memory grid · Gantt · Utilization chart · Process table · Bottleneck card · Event log
+**Dashboard:** Playback (play/pause/step/scrub) · Preset Demos · Gauge CPU/RAM/I/O · Queue lanes · Memory grid · Gantt · Utilization chart · Process table · Bottleneck card · Event log · What-if Compare · Export CSV
 
 ## 🎯 ขอบเขต
 
@@ -327,4 +324,3 @@ python -m experiments.exp_whatif         # ก่อน/หลังทำตา
 ---
 
 <div align="center">โปรเจกต์เพื่อการศึกษา · รายวิชา Operating Systems</div>
->>>>>>> Stashed changes
