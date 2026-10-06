@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSimStore } from '../store/useSimStore';
 import { Layers, MousePointerClick } from 'lucide-react';
-import { pidColor } from '../lib/colors';
 
 interface TraceStep {
   tick: number;
@@ -133,85 +132,54 @@ export default function PageFaultTrace() {
           <p className="text-[10px] mt-1">Try a workload that uses memory (e.g. Memory Hog)</p>
         </div>
       ) : (
-        <div className="overflow-x-auto pb-4 custom-scrollbar">
-          <div className="inline-flex flex-col gap-2 min-w-full px-2">
-            
-            {/* Page Reference Row */}
-            <div className="flex items-end mb-2">
-              <div className="w-24 shrink-0 font-bold text-xs text-slate-600 font-mono">
-                Page Ref
-              </div>
-              <div className="flex gap-1.5">
-                {traces.map((trace, idx) => (
-                  <div key={idx} className="w-8 flex flex-col items-center gap-1">
-                    <span className="text-[9px] text-slate-400">T{trace.tick}</span>
-                    <span className="font-bold text-sm text-slate-800">
-                      {trace.pageRequested}
-                    </span>
-                  </div>
-                ))}
-              </div>
+        <div className="mt-4 bg-white p-6 rounded-lg border border-slate-200 overflow-x-auto shadow-inner" style={{ fontFamily: 'Arial, sans-serif' }}>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 px-2 gap-4">
+            <div className="flex items-center gap-4">
+              <span className="text-[#166534] text-lg leading-tight font-bold">Page<br/>reference</span>
+              <span className="text-[#166534] text-lg ml-2 sm:ml-4 tracking-widest font-bold">
+                {traces.map(t => t.pageRequested).join(',')}
+              </span>
             </div>
-
-            {/* Frame Rows */}
-            <div className="flex">
-              <div className="w-24 shrink-0 flex flex-col gap-1 pr-4">
-                {Array.from({ length: numFrames }).map((_, frameIdx) => (
-                  <div key={frameIdx} className="h-8 flex items-center justify-end font-bold text-[10px] text-slate-400 font-mono">
-                    Frame {frameIdx}
-                  </div>
-                ))}
+            <span className="text-[#166534] text-lg font-bold">No. of Page frame - {numFrames}</span>
+          </div>
+          
+          <div className="flex items-start gap-4 sm:gap-6 ml-16 pb-4">
+            {traces.map((trace, idx) => (
+              <div key={idx} className="flex flex-col items-center w-10 sm:w-12 shrink-0 relative group">
+                {/* Optional tick tooltip */}
+                <div className="absolute -top-6 text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">T{trace.tick}</div>
+                
+                <div className="text-[#166534] text-lg mb-2 font-bold">{trace.pageRequested}</div>
+                
+                <div className="border border-[#166534] flex flex-col w-full bg-white">
+                  {Array.from({ length: numFrames }).map((_, frameIdx) => {
+                    const page = trace.framesState[frameIdx];
+                    const owner = trace.frameOwners[frameIdx];
+                    // If we are looking at a specific process, only show its pages
+                    const isOwnerMatch = selectedPid === 'all' || owner === selectedPid;
+                    const displayVal = (page !== null && owner !== null && isOwnerMatch) ? page : '';
+                    
+                    return (
+                      <div 
+                        key={frameIdx} 
+                        className="h-10 sm:h-12 border-b border-[#166534] flex items-center justify-center text-[#166534] text-lg font-bold last:border-b-0"
+                        title={owner !== null ? `P${owner}` : undefined}
+                      >
+                        {displayVal}
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                <div className={`mt-4 text-sm sm:text-base font-bold ${trace.isHit ? 'text-[#166534]' : 'text-[#166534]'}`}>
+                  {trace.isHit ? 'Hit' : 'Miss'}
+                </div>
               </div>
-
-              <div className="flex gap-1.5">
-                {traces.map((trace, traceIdx) => (
-                  <div key={traceIdx} className="w-8 flex flex-col gap-1">
-                    {Array.from({ length: numFrames }).map((_, frameIdx) => {
-                      const page = trace.framesState[frameIdx];
-                      const owner = trace.frameOwners[frameIdx];
-                      const isOccupied = page !== null && owner !== null;
-                      
-                      // Highlight if this is the frame that was just loaded/accessed
-                      const isNewlyLoaded = !trace.isHit && isOccupied && page === trace.pageRequested && (selectedPid === 'all' || owner === selectedPid);
-                      
-                      return (
-                        <div 
-                          key={frameIdx} 
-                          className={`h-8 border flex items-center justify-center font-bold text-xs font-mono rounded-[2px] transition-colors
-                            ${isOccupied ? 'shadow-sm' : 'bg-slate-50 border-slate-200 text-transparent'}
-                            ${isNewlyLoaded ? 'border-amber-400 border-2' : ''}
-                          `}
-                          style={{
-                            backgroundColor: isOccupied ? `${pidColor(owner)}20` : undefined,
-                            borderColor: isOccupied && !isNewlyLoaded ? pidColor(owner) : undefined,
-                            color: isOccupied ? pidColor(owner) : undefined
-                          }}
-                          title={isOccupied ? `P${owner} - Page ${page}` : 'Empty'}
-                        >
-                          {isOccupied ? page : '-'}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Hit/Miss Row */}
-            <div className="flex mt-2">
-              <div className="w-24 shrink-0"></div>
-              <div className="flex gap-1.5">
-                {traces.map((trace, idx) => (
-                  <div 
-                    key={idx} 
-                    className={`w-8 text-center text-[10px] font-bold font-mono ${trace.isHit ? 'text-emerald-500' : 'text-rose-500'}`}
-                  >
-                    {trace.isHit ? 'Hit' : 'Miss'}
-                  </div>
-                ))}
-              </div>
-            </div>
-
+            ))}
+          </div>
+          
+          <div className="mt-8 text-[#166534] text-xl px-2 font-bold">
+            Total Page Fault = {totalFaults}
           </div>
         </div>
       )}
