@@ -313,9 +313,11 @@ os-resource-sim/
 
 ## 👥 สมาชิกผู้จัดทำ (Contributors)
 
-| ชื่อ-สกุล | รหัสนักศึกษา | หน้าที่รับผิดชอบ |
-|---|:---:|---|
-| **ธนดล ปิ่นเงิน** | **670510667** | `sim/` engine, scheduler, memory, analyzer, `api/`, `frontend/`, tests & deployment |
+| ชื่อ-สกุล                   |   รหัสนักศึกษา  | หน้าที่รับผิดชอบ                                                                    |
+| --------------------------- | :-------------: | ----------------------------------------------------------------------------------- |
+| **นายปฏิภาณ ปานทะเล**       | **673380411-3** | `sim/` engine, scheduler, memory, analyzer, `api/`, `frontend/`, tests & deployment |
+| **นายณัฐชา อรรคฮาต**        | **673380582-6** | `sim/` engine, scheduler, memory, analyzer, `api/`, `frontend/`, tests & deployment |
+| **นายรัชชานนท์ ประดับแก้ว** | **673380599-9** | `sim/` engine, scheduler, memory, analyzer, `api/`, `frontend/`, tests & deployment |
 
 ---
 
