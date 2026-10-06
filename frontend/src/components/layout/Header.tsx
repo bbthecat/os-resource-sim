@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Cpu, Layers, GitCompare, MoreHorizontal, Download, Sliders, BookOpen } from 'lucide-react';
+import { Cpu, Layers, GitCompare, MoreHorizontal, Download, Sliders, BookOpen, Presentation, Minimize2 } from 'lucide-react';
 
 interface HeaderProps {
   canExport: boolean;
+  presenting: boolean;
+  onTogglePresent: () => void;
   onOpenPresets: () => void;
   onOpenCompare: () => void;
   onOpenExport: () => void;
@@ -15,6 +17,8 @@ const BUTTON =
 
 export default function Header({
   canExport,
+  presenting,
+  onTogglePresent,
   onOpenPresets,
   onOpenCompare,
   onOpenExport,
@@ -66,6 +70,15 @@ export default function Header({
       </div>
 
       <div className="flex items-center gap-2">
+        <button
+          onClick={onTogglePresent}
+          aria-pressed={presenting}
+          title={presenting ? 'ออกจากโหมดพรีเซนต์ (Esc)' : 'โหมดพรีเซนต์: ซ่อนแถบตั้งค่า ขยายตัวอักษร เต็มจอ'}
+          className={presenting ? `${BUTTON} bg-primary-soft border-primary/40 text-primary-ink` : BUTTON}
+        >
+          {presenting ? <Minimize2 size={15} className="text-primary" /> : <Presentation size={15} className="text-primary" />}
+          <span className="hidden sm:inline">{presenting ? 'ออกจากพรีเซนต์' : 'พรีเซนต์'}</span>
+        </button>
         <button onClick={onOpenPresets} className={BUTTON}>
           <Layers size={15} className="text-primary" />
           Preset scenarios

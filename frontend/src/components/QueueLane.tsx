@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useSimStore } from '../store/useSimStore';
+import { useSimStore, isPidShown } from '../store/useSimStore';
 import { pidColor, statusStyle } from '../lib/colors';
 import { PlayCircle, Clock, Disc, AlertCircle, type LucideIcon } from 'lucide-react';
 
@@ -30,30 +30,32 @@ function Lane({ icon: Icon, status, label, count, children }: Readonly<LaneProps
   );
 }
 
-function PidChip({ pid, label }: Readonly<{ pid: number; label?: string }>) {
+function PidChip({ pid, label, dimmed = false }: Readonly<{ pid: number; label?: string; dimmed?: boolean }>) {
   return (
     <span
-      className="px-2 py-0.5 rounded-md text-white text-xs font-mono font-medium"
+      className={`px-2 py-0.5 rounded-md text-white text-xs font-mono font-medium transition-opacity ${dimmed ? 'opacity-30' : ''}`}
       style={{ backgroundColor: pidColor(pid) }}
+      title={dimmed ? `P${pid} (ซ่อนจากตัวกรอง)` : undefined}
     >
       {label ?? `P${pid}`}
     </span>
   );
 }
 
-function PidList({ pids }: Readonly<{ pids: number[] }>) {
+function PidList({ pids, hiddenPids }: Readonly<{ pids: number[]; hiddenPids: number[] }>) {
   if (pids.length === 0) return <span className="text-xs text-subtle">ว่าง</span>;
+  // hidden processes stay in the lane (dimmed) so the queue length still reads true
   return (
     <>
       {pids.map((pid, idx) => (
-        <PidChip key={`${pid}-${idx}`} pid={pid} />
+        <PidChip key={`${pid}-${idx}`} pid={pid} dimmed={!isPidShown(hiddenPids, pid)} />
       ))}
     </>
   );
 }
 
 export default function QueueLane() {
-  const { result, currentTick } = useSimStore();
+  const { result, currentTick, hiddenPids } = useSimStore();
 
   if (!result || !result.snapshots || result.snapshots.length === 0) return null;
 
@@ -70,22 +72,26 @@ export default function QueueLane() {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
         <Lane icon={PlayCircle} status="RUNNING" label="Running on CPU">
           {current.running !== null ? (
-            <PidChip pid={current.running} label={`PID ${current.running}`} />
+            <PidChip
+              pid={current.running}
+              label={`PID ${current.running}`}
+              dimmed={!isPidShown(hiddenPids, current.running)}
+            />
           ) : (
             <span className="text-xs text-subtle">CPU ว่าง</span>
           )}
         </Lane>
 
         <Lane icon={Clock} status="READY" label="Ready queue" count={current.ready.length}>
-          <PidList pids={current.ready} />
+          <PidList pids={current.ready} hiddenPids={hiddenPids} />
         </Lane>
 
         <Lane icon={Disc} status="WAITING_IO" label="Waiting I/O (disk)" count={current.waiting_io.length}>
-          <PidList pids={current.waiting_io} />
+          <PidList pids={current.waiting_io} hiddenPids={hiddenPids} />
         </Lane>
 
         <Lane icon={AlertCircle} status="WAITING_MEM" label="Page fault wait" count={current.waiting_mem.length}>
-          <PidList pids={current.waiting_mem} />
+          <PidList pids={current.waiting_mem} hiddenPids={hiddenPids} />
         </Lane>
       </div>
     </section>

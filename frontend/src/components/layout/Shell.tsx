@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ControlPanel from '../ControlPanel';
 import PlaybackBar from '../PlaybackBar';
 import GaugeRow from '../GaugeRow';
@@ -17,6 +17,7 @@ import ExportReportModal from '../ExportReportModal';
 import CustomWorkloadModal from '../CustomWorkloadModal';
 import ScenarioPresetsModal from '../ScenarioPresetsModal';
 import Header from './Header';
+import ProcessFilter from '../ProcessFilter';
 import CustomView from './CustomView';
 import { usePlayback } from '../../hooks/usePlayback';
 import { useHotkeys } from '../../hooks/useHotkeys';
@@ -54,10 +55,34 @@ export default function Shell() {
   const [isPresetsOpen, setIsPresetsOpen] = useState(false);
   const [activePreset, setActivePreset] = useState<{ title: string; observation: string; lesson: string } | null>(null);
 
+  const [presenting, setPresenting] = useState(false);
+
+  // Presentation mode: bigger type (rem-based, so everything scales), no settings column, fullscreen
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('presenting', presenting);
+    if (presenting && !document.fullscreenElement) {
+      root.requestFullscreen?.().catch(() => {
+        // fullscreen can be refused (iframe, browser policy) — the mode still works without it
+      });
+    } else if (!presenting && document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  }, [presenting]);
+
+  // Leaving fullscreen (Esc / browser UI) also leaves presentation mode
+  useEffect(() => {
+    const onChange = () => {
+      if (!document.fullscreenElement) setPresenting(false);
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
   const flaggedTab = result?.diagnosis?.label ? DIAGNOSIS_TAB[result.diagnosis.label] : undefined;
 
   return (
-    <div className="min-h-screen max-w-[1440px] mx-auto px-4 sm:px-6 py-5 space-y-5">
+    <div className={`min-h-screen ${presenting ? 'max-w-none' : 'max-w-[1440px]'} mx-auto px-4 sm:px-6 py-5 space-y-5`}>
       <GuideModal isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
       <WhatIfCompare isOpen={isCompareOpen} onClose={() => setIsCompareOpen(false)} />
       <ExportReportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} />
@@ -70,6 +95,8 @@ export default function Shell() {
 
       <Header
         canExport={!!result}
+        presenting={presenting}
+        onTogglePresent={() => setPresenting((p) => !p)}
         onOpenPresets={() => setIsPresetsOpen(true)}
         onOpenCompare={() => setIsCompareOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
@@ -99,16 +126,17 @@ export default function Shell() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 items-start">
-        <aside className="lg:col-span-1 lg:sticky lg:top-5">
+        <aside className={presenting ? 'hidden' : 'lg:col-span-1 lg:sticky lg:top-5'}>
           <ControlPanel />
         </aside>
 
-        <main className="lg:col-span-3 min-w-0">
+        <main className={`${presenting ? 'lg:col-span-4' : 'lg:col-span-3'} min-w-0`}>
           {result ? (
             <div className="space-y-5">
               <div className="sticky top-3 z-30">
                 <PlaybackBar>
-                  <div role="tablist" aria-label="มุมมองผลลัพธ์" className="flex gap-1 overflow-x-auto -mx-1 px-1">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  <div role="tablist" aria-label="มุมมองผลลัพธ์" className="flex gap-1 overflow-x-auto -mx-1 px-1 min-w-0">
                     {TABS.map((t) => {
                       const selected = tab === t.id;
                       return (
@@ -133,6 +161,8 @@ export default function Shell() {
                         </button>
                       );
                     })}
+                  </div>
+                  <ProcessFilter />
                   </div>
                 </PlaybackBar>
               </div>

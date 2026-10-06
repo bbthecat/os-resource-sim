@@ -1,19 +1,26 @@
-import { useSimStore } from '../store/useSimStore';
+import { useSimStore, isPidShown } from '../store/useSimStore';
 import { Activity } from 'lucide-react';
 
 export default function EventLog() {
-  const { result, currentTick } = useSimStore();
+  const { result, currentTick, hiddenPids } = useSimStore();
 
   if (!result || !result.snapshots || result.snapshots.length === 0) return null;
 
   // Collect events around current tick (e.g. last 15 ticks)
   const windowStart = Math.max(0, currentTick - 15);
   const recentEvents: { tick: number; event: string }[] = [];
+  let filteredOut = 0;
 
   for (let t = currentTick; t >= windowStart; t--) {
     const snap = result.snapshots[t];
     if (snap && snap.events) {
       for (const ev of snap.events) {
+        // `action:pid[:...]`; events without a pid (e.g. thrashing_start) always stay
+        const target = Number.parseInt(ev.split(':')[1]);
+        if (!Number.isNaN(target) && !isPidShown(hiddenPids, target)) {
+          filteredOut++;
+          continue;
+        }
         recentEvents.push({ tick: t, event: ev });
       }
     }
@@ -93,7 +100,11 @@ export default function EventLog() {
             })}
           </ul>
         ) : (
-          <div className="text-subtle text-center py-6 text-sm">ไม่มีเหตุการณ์เคอร์เนลในช่วงนี้</div>
+          <div className="text-subtle text-center py-6 text-sm">
+            {filteredOut > 0
+              ? 'ไม่มีเหตุการณ์ของโปรเซสที่เลือกในช่วงนี้'
+              : 'ไม่มีเหตุการณ์เคอร์เนลในช่วงนี้'}
+          </div>
         )}
       </div>
     </section>

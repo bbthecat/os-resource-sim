@@ -1,5 +1,5 @@
 import { useState, useMemo, useId } from 'react';
-import { useSimStore } from '../store/useSimStore';
+import { useSimStore, isPidShown } from '../store/useSimStore';
 import {
   ResponsiveContainer,
   BarChart,
@@ -211,7 +211,7 @@ function SeriesChips({
 // ---------- Component ----------
 
 export default function UtilizationChart() {
-  const { result, currentTick } = useSimStore();
+  const { result, currentTick, hiddenPids } = useSimStore();
   const [chartMode, setChartMode] = useState<ChartMode>('utilization');
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const gradientPrefix = `uc${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -248,16 +248,18 @@ export default function UtilizationChart() {
     return points;
   }, [result]);
 
-  // Per Process Bar Chart Data (Turnaround vs Wait Time)
+  // Per Process Bar Chart Data (Turnaround vs Wait Time), only processes the process filter shows
   const processData = useMemo(() => {
     if (!result || !result.metrics || !result.metrics.per_process) return [];
-    return result.metrics.per_process.map((p: any) => ({
-      name: `P${p.pid}`,
-      turnaround: p.turnaround ?? 0,
-      waitTime: p.wait_time ?? 0,
-      pageFaults: p.page_faults ?? 0,
-    }));
-  }, [result]);
+    return result.metrics.per_process
+      .filter((p: any) => isPidShown(hiddenPids, p.pid))
+      .map((p: any) => ({
+        name: `P${p.pid}`,
+        turnaround: p.turnaround ?? 0,
+        waitTime: p.wait_time ?? 0,
+        pageFaults: p.page_faults ?? 0,
+      }));
+  }, [result, hiddenPids]);
 
   if (!result || timelineData.length === 0) return null;
 
@@ -400,7 +402,13 @@ export default function UtilizationChart() {
             </ResponsiveContainer>
           )}
 
-          {chartMode === 'processes' && (
+          {chartMode === 'processes' && processData.length === 0 && (
+            <div className="h-full flex items-center justify-center text-sm text-subtle">
+              ไม่มีโปรเซสที่แสดงตามตัวกรอง
+            </div>
+          )}
+
+          {chartMode === 'processes' && processData.length > 0 && (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={processData} margin={{ ...CHART_MARGIN, top: 8 }} barGap={4} barCategoryGap="24%">
                 <CartesianGrid stroke={CHART.grid} vertical={false} />

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useSimStore } from '../store/useSimStore';
+import { useSimStore, isPidShown } from '../store/useSimStore';
 import { pidColor, statusStyle } from '../lib/colors';
 import { ListOrdered } from 'lucide-react';
 
@@ -13,7 +13,7 @@ const STATUS_THAI: Record<string, string> = {
 };
 
 export default function ProcessTable() {
-  const { result, currentTick } = useSimStore();
+  const { result, currentTick, hiddenPids } = useSimStore();
 
   // Per-tick running totals so each playback frame is an O(1) lookup
   const cumulative = useMemo(() => {
@@ -51,6 +51,8 @@ export default function ProcessTable() {
   if (!result?.metrics?.per_process) return null;
 
   const processes: any[] = result.metrics.per_process;
+  const shownProcesses = processes.filter((p) => isPidShown(hiddenPids, p.pid));
+  const hiddenCount = processes.length - shownProcesses.length;
   const t = Math.min(currentTick, result.snapshots.length - 1);
   const snap = result.snapshots[t];
 
@@ -97,7 +99,7 @@ export default function ProcessTable() {
             </tr>
           </thead>
           <tbody>
-            {processes.map((proc: any) => {
+            {shownProcesses.map((proc: any) => {
               const state = stateAt(proc);
               const s = statusStyle(state);
               const finished = state === 'DONE';
@@ -134,9 +136,22 @@ export default function ProcessTable() {
                 </tr>
               );
             })}
+            {shownProcesses.length === 0 && (
+              <tr>
+                <td colSpan={8} className="py-6 px-3 text-center text-sm text-subtle">
+                  ไม่มีโปรเซสที่แสดงตามตัวกรอง
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      {hiddenCount > 0 && (
+        <p className="text-xs text-muted">
+          ซ่อน <span className="tabular-nums">{hiddenCount}</span> โปรเซสจากตัวกรอง
+        </p>
+      )}
     </section>
   );
 }

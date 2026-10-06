@@ -36,6 +36,11 @@
     --night-signal: 245 158 11;     /* #F59E0B — alert dot on dark */
   }
 
+  /* presentation mode: everything is rem-based, so this scales the whole UI */
+  html.presenting {
+    font-size: 18px;
+  }
+
   body {
     @apply bg-canvas text-ink min-h-screen font-sans antialiased overflow-x-hidden;
   }

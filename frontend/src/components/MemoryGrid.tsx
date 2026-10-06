@@ -1,9 +1,9 @@
-import { useSimStore } from '../store/useSimStore';
+import { useSimStore, isPidShown } from '../store/useSimStore';
 import { pidColor } from '../lib/colors';
 import { Layers } from 'lucide-react';
 
 export default function MemoryGrid() {
-  const { result, currentTick } = useSimStore();
+  const { result, currentTick, hiddenPids } = useSimStore();
 
   if (!result || !result.snapshots || result.snapshots.length === 0) return null;
 
@@ -39,12 +39,15 @@ export default function MemoryGrid() {
         {current.frames.map((ownerPid, idx) => {
           const isOccupied = ownerPid !== null;
           const color = pidColor(ownerPid);
+          // frames of processes hidden by the filter stay in place, just faded
+          const dimmed = isOccupied && !isPidShown(hiddenPids, ownerPid);
           return (
             <div
               key={idx}
-              className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-md border text-center transition-colors ${
+              title={dimmed ? `F${idx} P${ownerPid} (ซ่อนจากตัวกรอง)` : undefined}
+              className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-md border text-center transition-[color,background-color,border-color,opacity] ${
                 isOccupied ? '' : 'bg-surface-muted border-line text-subtle'
-              }`}
+              } ${dimmed ? 'opacity-30' : ''}`}
               style={
                 isOccupied
                   ? { backgroundColor: `${color}1F`, borderColor: `${color}80` }

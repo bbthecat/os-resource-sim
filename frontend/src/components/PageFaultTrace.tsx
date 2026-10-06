@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSimStore } from '../store/useSimStore';
+import { useSimStore, isPidShown } from '../store/useSimStore';
 import { Layers, MousePointerClick, Radio, ListOrdered } from 'lucide-react';
 
 type PidFilter = number | 'all';
@@ -15,17 +15,19 @@ interface TraceStep {
   frameOwners: (number | null)[];
 }
 
-// What a frame shows in one column for the current process filter: `page:owner`, or null when blank
-function cellKey(trace: TraceStep, frameIdx: number, pid: PidFilter): string | null {
+// What a frame shows in one column for the current process filter: `page:owner`, or null when blank.
+// Frames owned by processes hidden by the global process filter read as blank.
+function cellKey(trace: TraceStep, frameIdx: number, pid: PidFilter, hiddenPids: number[]): string | null {
   const page = trace.framesState[frameIdx];
   const owner = trace.frameOwners[frameIdx];
   if (page === null || page === undefined || owner === null || owner === undefined) return null;
   if (pid !== 'all' && owner !== pid) return null;
+  if (!isPidShown(hiddenPids, owner)) return null;
   return `${page}:${owner}`;
 }
 
 export default function PageFaultTrace() {
-  const { result, currentTick } = useSimStore();
+  const { result, currentTick, hiddenPids } = useSimStore();
   // null = not chosen yet (defaults to the first process); 'all' mixes processes, so it is opt-in
   const [pidChoice, setPidChoice] = useState<PidFilter | null>(null);
   const [followTimeline, setFollowTimeline] = useState(true);
@@ -47,13 +49,20 @@ export default function PageFaultTrace() {
     return Array.from(pids).sort((a, b) => a - b);
   }, [result]);
 
-  // Fall back to the first process when nothing is chosen or the chosen one is not in this result
+  // Only processes the global process filter shows; 'all' means all of these
+  const shownPids = useMemo(
+    () => pidsWithMemory.filter(pid => isPidShown(hiddenPids, pid)),
+    [pidsWithMemory, hiddenPids]
+  );
+
+  // Fall back to the first shown process when nothing is chosen, or the chosen one is
+  // not in this result or is hidden by the process filter
   const selectedPid: PidFilter =
     pidChoice === 'all'
       ? 'all'
-      : pidChoice !== null && pidsWithMemory.includes(pidChoice)
+      : pidChoice !== null && shownPids.includes(pidChoice)
         ? pidChoice
-        : (pidsWithMemory[0] ?? 'all');
+        : (shownPids[0] ?? 'all');
 
   const traces = useMemo(() => {
     if (!result || !result.snapshots) return [];
@@ -72,7 +81,7 @@ export default function PageFaultTrace() {
           const page = parseInt(parts[2]);
           const hit = parts[3] === '1';
 
-          if (selectedPid === 'all' || evPid === selectedPid) {
+          if (selectedPid === 'all' ? isPidShown(hiddenPids, evPid) : evPid === selectedPid) {
             if (hit) {
               steps.push({
                 tick: snap.t,
@@ -91,7 +100,7 @@ export default function PageFaultTrace() {
           const parts = ev.split(':');
           const evPid = parseInt(parts[1]);
           
-          if (selectedPid === 'all' || evPid === selectedPid) {
+          if (selectedPid === 'all' ? isPidShown(hiddenPids, evPid) : evPid === selectedPid) {
             const pending = pendingMisses.get(evPid);
             if (pending) {
               steps.push({
@@ -111,7 +120,7 @@ export default function PageFaultTrace() {
     }
     
     return steps.sort((a, b) => a.tick - b.tick);
-  }, [result, selectedPid]);
+  }, [result, selectedPid, hiddenPids]);
 
   // Only the columns that have happened by the playhead when following the timeline
   const visibleTraces = useMemo(
@@ -128,10 +137,10 @@ export default function PageFaultTrace() {
   const shownFrames = useMemo(() => {
     const used: number[] = [];
     for (let f = 0; f < numFrames; f++) {
-      if (visibleTraces.some(t => cellKey(t, f, selectedPid) !== null)) used.push(f);
+      if (visibleTraces.some(t => cellKey(t, f, selectedPid, hiddenPids) !== null)) used.push(f);
     }
     return used;
-  }, [visibleTraces, numFrames, selectedPid]);
+  }, [visibleTraces, numFrames, selectedPid, hiddenPids]);
 
   // Keep the newest column in view horizontally (never scrolls the page vertically)
   useEffect(() => {
@@ -197,7 +206,7 @@ export default function PageFaultTrace() {
               onChange={(e) => setPidChoice(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
             >
               <option value="all">All processes</option>
-              {pidsWithMemory.map(pid => (
+              {shownPids.map(pid => (
                 <option key={pid} value={pid}>Process P{pid}</option>
               ))}
             </select>
@@ -213,8 +222,14 @@ export default function PageFaultTrace() {
       {traces.length === 0 ? (
         <div className="h-32 flex flex-col items-center justify-center text-subtle text-sm">
           <MousePointerClick size={24} className="mb-2" />
-          <p>No memory access trace available</p>
-          <p className="text-xs mt-1">Try a workload that uses memory (e.g. Memory Hog)</p>
+          {pidsWithMemory.length > 0 && shownPids.length === 0 ? (
+            <p>โปรเซสที่เข้าถึงหน่วยความจำถูกซ่อนจากตัวกรองทั้งหมด</p>
+          ) : (
+            <>
+              <p>No memory access trace available</p>
+              <p className="text-xs mt-1">Try a workload that uses memory (e.g. Memory Hog)</p>
+            </>
+          )}
         </div>
       ) : (
         <div ref={scrollRef} className="relative bg-surface py-4 pr-4 rounded-lg border border-line overflow-x-auto">
@@ -273,11 +288,11 @@ export default function PageFaultTrace() {
                   {shownFrames.map(frameIdx => {
                     const page = trace.framesState[frameIdx];
                     const owner = trace.frameOwners[frameIdx];
-                    const key = cellKey(trace, frameIdx, selectedPid);
+                    const key = cellKey(trace, frameIdx, selectedPid, hiddenPids);
                     // The frame that holds the requested page: tinted as a fault or a hit
                     const isRequested = key !== null && page === trace.pageRequested && owner === trace.pid;
                     // Same page and owner as this frame in the previous column: carried over, so faded
-                    const isStale = key !== null && prev !== null && cellKey(prev, frameIdx, selectedPid) === key;
+                    const isStale = key !== null && prev !== null && cellKey(prev, frameIdx, selectedPid, hiddenPids) === key;
                     let tone: string;
                     if (isRequested) tone = trace.isHit ? 'bg-primary-soft text-primary-ink font-semibold' : 'bg-danger-soft text-danger font-semibold';
                     else if (isStale) tone = 'text-subtle font-normal';
