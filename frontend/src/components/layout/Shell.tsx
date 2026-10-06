@@ -6,6 +6,7 @@ import GaugeRow from '../GaugeRow';
 import QueueLane from '../QueueLane';
 import MemoryGrid from '../MemoryGrid';
 import PageFaultTrace from '../PageFaultTrace';
+import StandalonePageReplacement from '../StandalonePageReplacement';
 import GanttChart from '../GanttChart';
 import UtilizationChart from '../UtilizationChart';
 import BottleneckCard from '../BottleneckCard';
@@ -337,6 +338,11 @@ export default function Shell() {
             </motion.div>
           )}
           </AnimatePresence>
+
+          {/* Standalone Visualizer (Always Visible at bottom) */}
+          <div className="mt-6">
+            <StandalonePageReplacement />
+          </div>
         </div>
       </div>
     </div>
