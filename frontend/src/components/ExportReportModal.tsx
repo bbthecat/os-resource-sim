@@ -1,17 +1,24 @@
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useSimStore } from '../store/useSimStore';
-import { Download, Copy, Check, Printer, X, FileSpreadsheet } from 'lucide-react';
+import { Download, Copy, Check, Printer, X } from 'lucide-react';
 
 interface ExportReportModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export default function ExportReportModal({ isOpen, onClose }: ExportReportModalProps) {
+const SECONDARY_BUTTON =
+  'inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-surface border border-line text-sm font-medium text-ink hover:bg-surface-muted hover:border-line-strong transition-colors';
+
+const OPTION_CARD =
+  'text-left p-4 rounded-lg border border-line hover:border-primary/50 hover:bg-primary-soft/40 transition-colors';
+
+export default function ExportReportModal({ isOpen, onClose }: Readonly<ExportReportModalProps>) {
   const { result, config } = useSimStore();
   const [copied, setCopied] = useState(false);
 
-  if (!isOpen || !result) return null;
+  if (!result) return null;
 
   const { metrics, diagnosis } = result;
 
@@ -42,7 +49,7 @@ export default function ExportReportModal({ isOpen, onClose }: ExportReportModal
     lines.push('');
     lines.push('=== Per-Process Metrics ===');
     lines.push('PID,Arrival,Priority,Status,Turnaround,WaitTime,ResponseTime,PageFaults');
-    
+
     if (metrics.per_process) {
       for (const p of metrics.per_process) {
         lines.push(`${p.pid},${p.arrival},${p.priority ?? '-'},${p.state},${p.turnaround ?? '-'},${p.wait_time ?? '-'},${p.response ?? '-'},${p.page_faults ?? 0}`);
@@ -88,87 +95,103 @@ export default function ExportReportModal({ isOpen, onClose }: ExportReportModal
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const preview: { label: string; value: string; mono?: boolean }[] = [
+    { label: 'Workload', value: config.workload, mono: true },
+    { label: 'Scheduler', value: config.scheduler, mono: true },
+    { label: 'Avg turnaround', value: `${metrics.avg_turnaround.toFixed(2)} ticks` },
+    { label: 'Avg wait', value: `${metrics.avg_waiting.toFixed(2)} ticks` },
+    { label: 'Page faults', value: String(metrics.total_page_faults) },
+    { label: 'Jain fairness', value: metrics.fairness.toFixed(3) },
+    { label: 'Throughput', value: `${metrics.throughput.toFixed(4)} proc/tick` },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white/95 border border-white/80 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-gradient-to-r from-pastel-green/20 via-white to-pastel-blue/20">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-emerald-100 border border-emerald-200 text-emerald-600 shadow-sm">
-              <FileSpreadsheet size={20} />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-800">ส่งออกข้อมูลและรายงาน (Export Simulation Data)</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">ดาวน์โหลดผลการจำลองในรูปแบบ CSV หรือ Markdown สำหรับจัดทำรายงาน</p>
-            </div>
-          </div>
-          <button 
-            onClick={onClose} 
-            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition"
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="export-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/30 backdrop-blur-[2px]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-modal-title"
+            className="bg-surface border border-line rounded-xl shadow-pop w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col"
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
           >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="p-5 sm:p-6 space-y-4 text-xs text-slate-700">
-          <p className="leading-relaxed text-slate-600 font-medium text-xs">
-            ส่งออกตัวชี้วัดและข้อมูลโปรเซสสำหรับการจัดทำเอกสารประกอบโครงงาน:
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
-            <button
-              onClick={handleDownloadCSV}
-              className="p-4 rounded-2xl bg-white hover:bg-emerald-50/50 border-2 border-emerald-200/80 hover:border-emerald-400 flex flex-col items-center justify-center space-y-2 transition text-center shadow-sm hover:scale-105 active:scale-95 group"
-            >
-              <div className="p-2.5 rounded-xl bg-emerald-100 text-emerald-600 group-hover:scale-110 transition-transform">
-                <Download size={22} />
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-line">
+              <div>
+                <h2 id="export-modal-title" className="text-lg font-semibold text-ink">
+                  ส่งออกผลการจำลอง
+                </h2>
+                <p className="mt-0.5 text-sm text-muted">
+                  ส่งออกตัวชี้วัดและข้อมูลโปรเซสเป็น CSV หรือ Markdown สำหรับจัดทำเอกสารประกอบโครงงาน
+                </p>
               </div>
-              <span className="font-bold text-slate-800 text-xs">Export CSV (.csv)</span>
-              <span className="text-[11px] text-slate-500">สำหรับ Excel, Google Sheets, Python Pandas</span>
-            </button>
+              <button
+                onClick={onClose}
+                aria-label="ปิด"
+                className="shrink-0 text-muted hover:text-ink hover:bg-surface-muted rounded-md p-1.5 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-            <button
-              onClick={handleCopyMarkdown}
-              className="p-4 rounded-2xl bg-white hover:bg-blue-50/50 border-2 border-blue-200/80 hover:border-blue-400 flex flex-col items-center justify-center space-y-2 transition text-center shadow-sm hover:scale-105 active:scale-95 group"
-            >
-              <div className="p-2.5 rounded-xl bg-blue-100 text-blue-600 group-hover:scale-110 transition-transform">
-                {copied ? <Check size={22} className="text-emerald-600" /> : <Copy size={22} />}
+            {/* Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-4 text-sm text-ink">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button onClick={handleDownloadCSV} className={OPTION_CARD}>
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    <Download size={16} className="text-primary" />
+                    Export CSV (.csv)
+                  </span>
+                  <span className="block mt-1 text-sm text-muted">สำหรับ Excel, Google Sheets, Python Pandas</span>
+                </button>
+
+                <button onClick={handleCopyMarkdown} className={OPTION_CARD}>
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} className="text-primary" />}
+                    {copied ? 'คัดลอกแล้ว' : 'Copy Markdown table'}
+                  </span>
+                  <span className="block mt-1 text-sm text-muted">สำหรับ Notion, GitHub หรือ Word</span>
+                </button>
               </div>
-              <span className="font-bold text-slate-800 text-xs">
-                {copied ? 'คัดลอกสำเร็จแล้ว!' : 'Copy Markdown Table'}
-              </span>
-              <span className="text-[11px] text-slate-500">สำหรับ Notion, GitHub, หรือ Word</span>
-            </button>
-          </div>
 
-          {/* Quick Preview */}
-          <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 font-mono text-xs text-slate-300 max-h-36 overflow-y-auto space-y-1 shadow-inner">
-            <div className="text-emerald-400 font-bold">// METRICS PREVIEW</div>
-            <div className="text-slate-200">Workload: {config.workload} | Scheduler: {config.scheduler}</div>
-            <div className="text-slate-200">Avg Turnaround: {metrics.avg_turnaround.toFixed(2)} ticks | Avg Wait: {metrics.avg_waiting.toFixed(2)} ticks</div>
-            <div className="text-slate-200">Page Faults: {metrics.total_page_faults} | Jain Fairness: {metrics.fairness.toFixed(3)}</div>
-            <div className="text-slate-200">Throughput: {metrics.throughput.toFixed(4)} proc/tick</div>
-          </div>
-        </div>
+              {/* Quick preview */}
+              <div className="bg-surface-muted rounded-lg p-4">
+                <p className="mb-2 text-xs font-medium text-muted">ตัวอย่างข้อมูลที่ส่งออก</p>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                  {preview.map(({ label, value, mono }) => (
+                    <div key={label} className="contents">
+                      <dt className="text-muted">{label}</dt>
+                      <dd className={`text-ink tabular-nums ${mono ? 'font-mono' : ''}`}>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex justify-between items-center">
-          <button
-            onClick={() => window.print()}
-            className="flex items-center space-x-1.5 px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200 text-xs font-bold transition shadow-sm active:scale-95"
-          >
-            <Printer size={14} />
-            <span>Print View</span>
-          </button>
-          <button 
-            onClick={onClose} 
-            className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition active:scale-95 shadow-sm"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
+            {/* Footer */}
+            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-line">
+              <button onClick={() => window.print()} className={SECONDARY_BUTTON}>
+                <Printer size={14} className="text-muted" />
+                Print view
+              </button>
+              <button onClick={onClose} className={SECONDARY_BUTTON}>
+                ปิด
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

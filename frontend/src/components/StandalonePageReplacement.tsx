@@ -96,94 +96,108 @@ export default function StandalonePageReplacement() {
     return { steps, faultCount, refs };
   }, [refString, numFrames, algo]);
 
+  const inputClass =
+    'bg-surface border border-line rounded-md text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
+
   return (
-    <div className="glass-panel border border-border-subtle rounded-xl p-6 space-y-6 bg-white overflow-hidden shadow-sm">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-subtle pb-4">
+    <section className="bg-surface border border-line rounded-xl p-4 sm:p-5 space-y-6 overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-[#166534]">Page Replacement Visualizer (Standalone)</h2>
-          <p className="text-sm text-slate-500">พิมพ์ตัวเลขด้านล่างแล้วมันจะวาดตารางเหมือนในตำราให้เลย!</p>
+          <h2 className="text-lg font-semibold text-ink">Page replacement visualizer (standalone)</h2>
+          <p className="mt-0.5 text-sm text-muted">พิมพ์ลำดับการอ้างอิงหน้าด้านล่าง แล้วระบบจะวาดตารางแบบในตำราให้</p>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="font-semibold text-[#166534]">Algorithm:</span>
-            <select 
-              value={algo} 
+          <label className="flex items-center gap-2 text-sm">
+            <span className="font-medium text-muted">Algorithm</span>
+            <select
+              value={algo}
               onChange={e => setAlgo(e.target.value as Algorithm)}
-              className="border border-[#86efac] text-[#166534] font-bold rounded px-2 py-1 bg-[#f0fdf4] outline-none cursor-pointer"
+              className={`${inputClass} px-2.5 py-1.5 cursor-pointer`}
             >
               <option value="FIFO">FIFO</option>
               <option value="LRU">LRU</option>
               <option value="Optimal">Optimal</option>
             </select>
-          </div>
-          
-          <div className="flex items-center gap-2 text-sm">
-            <span className="font-semibold text-[#166534]">Frames:</span>
-            <input 
-              type="number" 
-              min={1} 
-              max={10} 
-              value={numFrames} 
+          </label>
+
+          <label className="flex items-center gap-2 text-sm">
+            <span className="font-medium text-muted">Frames</span>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={numFrames}
               onChange={e => setNumFrames(parseInt(e.target.value) || 4)}
-              className="border border-[#86efac] text-[#166534] font-bold rounded px-2 py-1 bg-[#f0fdf4] w-16 text-center outline-none"
+              className={`${inputClass} px-2.5 py-1.5 w-16 text-center font-mono tabular-nums`}
             />
-          </div>
+          </label>
         </div>
       </div>
-      
+
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-semibold text-[#166534]">Page Reference String (ใส่ตัวเลขคั่นด้วยลูกน้ำ):</label>
-        <input 
-          type="text" 
+        <label htmlFor="page-ref-string" className="text-sm font-medium text-ink">
+          Page reference string (ใส่ตัวเลขคั่นด้วยลูกน้ำ)
+        </label>
+        <input
+          id="page-ref-string"
+          type="text"
           value={refString}
           onChange={e => setRefString(e.target.value)}
-          className="border border-slate-300 focus:border-[#22c55e] rounded px-3 py-2 w-full font-mono text-sm outline-none transition-colors"
+          className={`${inputClass} px-3 py-2 w-full font-mono`}
           placeholder="e.g. 7,0,1,2,0,3,0,4,2,3,0,3,2,3"
         />
       </div>
-      
+
       {/* Textbook Output Area */}
-      <div className="mt-8 bg-white p-6 rounded-lg border border-slate-200 overflow-x-auto shadow-inner" style={{ fontFamily: 'Arial, sans-serif' }}>
+      <div className="mt-8 bg-surface p-6 rounded-lg border border-line overflow-x-auto">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 px-2 gap-4">
           <div className="flex items-center gap-4">
-            <span className="text-[#166534] text-lg leading-tight">Page<br/>reference</span>
-            <span className="text-[#166534] text-lg ml-2 sm:ml-4 tracking-widest">{refString}</span>
+            <span className="text-primary-ink text-lg leading-tight">Page<br/>reference</span>
+            <span className="text-primary-ink text-lg ml-2 sm:ml-4 tracking-widest font-mono tabular-nums">{refString}</span>
           </div>
-          <span className="text-[#166534] text-lg">No. of Page frame - {numFrames}</span>
+          <span className="text-primary-ink text-lg">
+            No. of Page frame - <span className="font-mono tabular-nums">{numFrames}</span>
+          </span>
         </div>
-        
+
         <div className="flex items-start gap-4 sm:gap-6 ml-16">
           {trace.steps.map((step, idx) => (
             <div key={idx} className="flex flex-col items-center w-10 sm:w-12 shrink-0">
-              <div className="text-[#166534] text-lg mb-2">{step.ref}</div>
-              
-              <div className="border border-[#166534] flex flex-col w-full bg-white">
-                {step.frames.map((frameVal, fIdx) => (
-                  <div 
-                    key={fIdx} 
-                    className="h-10 sm:h-12 border-b border-[#166534] flex items-center justify-center text-[#166534] text-lg last:border-b-0"
-                  >
-                    {frameVal !== null ? frameVal : ''}
-                  </div>
-                ))}
+              <div className="text-primary-ink text-lg mb-2 font-mono tabular-nums">{step.ref}</div>
+
+              <div className="border border-line-strong flex flex-col w-full bg-surface">
+                {step.frames.map((frameVal, fIdx) => {
+                  // The frame that holds the referenced page: tinted as a fault or a hit
+                  let tone = 'text-primary-ink';
+                  if (frameVal === step.ref) tone = step.isHit ? 'bg-primary-soft text-primary-ink' : 'bg-danger-soft text-danger';
+
+                  return (
+                    <div
+                      key={fIdx}
+                      className={`h-10 sm:h-12 border-b border-line flex items-center justify-center text-lg font-mono tabular-nums last:border-b-0 ${tone}`}
+                    >
+                      {frameVal !== null ? frameVal : ''}
+                    </div>
+                  );
+                })}
               </div>
-              
-              <div className={`mt-4 text-sm sm:text-base ${step.isHit ? 'text-[#166534]' : 'text-[#166534]'}`}>
+
+              <div className={`mt-4 text-sm sm:text-base font-medium ${step.isHit ? 'text-primary-ink' : 'text-danger'}`}>
                 {step.isHit ? 'Hit' : 'Miss'}
               </div>
             </div>
           ))}
         </div>
-        
-        <div className="mt-8 text-[#166534] text-xl px-2">
-          Total Page Fault = {trace.faultCount}
+
+        <div className="mt-8 text-primary-ink text-xl px-2">
+          Total Page Fault = <span className="font-mono tabular-nums">{trace.faultCount}</span>
         </div>
-        
-        <div className="mt-8 text-center text-[#166534] text-base">
+
+        <div className="mt-8 text-center text-primary-ink text-base">
           Here {algo} has {algo === 'Optimal' ? 'minimum' : ''} page faults for this reference string.
         </div>
       </div>
-    </div>
+    </section>
   );
 }

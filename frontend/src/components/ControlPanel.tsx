@@ -1,8 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useSimStore } from '../store/useSimStore';
 import { runSimulation, fetchWorkloads } from '../api/client';
 import { Play, Sliders, RefreshCw } from 'lucide-react';
 import { AnimatedSlider } from './AnimatedSlider';
+
+const SELECT =
+  'w-full bg-surface border border-line rounded-md px-2.5 py-1.5 text-sm text-ink hover:border-line-strong focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-colors';
+
+interface FieldProps {
+  id: string;
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}
+
+function Field({ id, label, hint, children }: Readonly<FieldProps>) {
+  return (
+    <div>
+      <label htmlFor={id} className="block mb-1.5 text-sm font-medium text-ink">
+        {label}
+        {hint && <span className="ml-1 text-xs font-normal text-muted">{hint}</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 export default function ControlPanel() {
   const { config, setConfig, setResult } = useSimStore();
@@ -54,34 +76,35 @@ export default function ControlPanel() {
   };
 
   return (
-    <div className="bg-white p-4 rounded-lg shadow-card border border-border-subtle space-y-4">
-      <div className="flex items-center space-x-2 text-slate-700 border-b border-border-subtle pb-2.5">
-        <Sliders className="text-blue-500" size={17} />
-        <div>
-          <h2 className="text-sm font-bold tracking-tight text-slate-800">พารามิเตอร์จำลอง</h2>
-          <p className="text-[10px] text-slate-500 font-mono tracking-wider">SIMULATION CONFIG</p>
-        </div>
-      </div>
+    <div className="bg-surface border border-line rounded-xl p-4 space-y-4">
+      <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+        <Sliders size={16} className="text-muted" />
+        การตั้งค่า
+      </h2>
 
       {errorMsg && (
-        <div className="p-2.5 rounded-md bg-red-950/40 border border-red-500/40 text-red-200 text-xs">
+        <div
+          role="alert"
+          className="border-l-[3px] border-danger bg-danger-soft rounded-r-lg px-3 py-2 text-sm text-danger"
+        >
           {errorMsg}
         </div>
       )}
 
-      <div className="space-y-3.5 text-xs">
-        {/* Workload */}
-        <div>
-          <label className="block text-[11px] font-bold text-slate-700 mb-1 tracking-wide">
-            รูปแบบงาน <span className="text-slate-400 font-normal">(Workload)</span>
-          </label>
-          <select 
+      <div className="space-y-4">
+        <Field id="cp-workload" label="รูปแบบงาน" hint="Workload">
+          <select
+            id="cp-workload"
             value={config.workload}
             onChange={(e) => setConfig({ ...config, workload: e.target.value })}
-            className="w-full bg-slate-50 border border-border-subtle hover:border-pastel-blue rounded-md px-2.5 py-1.5 text-slate-800 text-xs focus:border-blue-500 focus:outline-none transition shadow-inner font-semibold"
+            className={SELECT}
           >
             {workloads.length > 0 ? (
-              workloads.map(w => <option key={w} value={w}>{getWorkloadLabel(w)}</option>)
+              workloads.map((w) => (
+                <option key={w} value={w}>
+                  {getWorkloadLabel(w)}
+                </option>
+              ))
             ) : (
               <>
                 <option value="mixed">งานผสมทั่วไป (Mixed)</option>
@@ -92,81 +115,64 @@ export default function ControlPanel() {
               </>
             )}
           </select>
-        </div>
+        </Field>
 
-        {/* Scheduler */}
-        <div>
-          <label className="block text-[11px] font-bold text-slate-700 mb-1 tracking-wide">
-            อัลกอริทึมจัดคิว <span className="text-slate-400 font-normal">(CPU Scheduler)</span>
-          </label>
-          <select 
+        <Field id="cp-scheduler" label="อัลกอริทึมจัดคิว CPU" hint="Scheduler">
+          <select
+            id="cp-scheduler"
             value={config.scheduler}
             onChange={(e) => setConfig({ ...config, scheduler: e.target.value })}
-            className="w-full bg-slate-50 border border-border-subtle hover:border-pastel-blue rounded-md px-2.5 py-1.5 text-slate-800 text-xs focus:border-blue-500 focus:outline-none transition shadow-inner font-semibold"
+            className={SELECT}
           >
             <option value="rr">Round Robin (สลับคิววนรอบ)</option>
             <option value="fcfs">FCFS (มาก่อนได้ก่อน)</option>
             <option value="priority">Priority (ตามความสำคัญ)</option>
             <option value="sjf">SJF (งานสั้นทำก่อน)</option>
           </select>
-        </div>
+        </Field>
 
-        {/* Quantum (Only when RR) */}
+        {/* Quantum only applies to Round Robin */}
         {config.scheduler === 'rr' && (
-          <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-subtle relative overflow-hidden">
-             <div className="absolute inset-0 bg-gradient-to-r from-pastel-blue/20 to-transparent"></div>
-             <div className="relative z-10">
-                <AnimatedSlider
-                  value={config.quantum}
-                  onValueChange={(val) => setConfig({ ...config, quantum: val })}
-                  min={1}
-                  max={16}
-                  color="blue"
-                  label="Time Quantum"
-                  unit="ticks"
-                />
-             </div>
-          </div>
+          <AnimatedSlider
+            value={config.quantum}
+            onValueChange={(val) => setConfig({ ...config, quantum: val })}
+            min={1}
+            max={16}
+            color="emerald"
+            label="Time quantum"
+            unit="ticks"
+          />
         )}
 
-        {/* RAM Frames */}
-        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-subtle relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-pastel-green/30 to-transparent"></div>
-          <div className="relative z-10">
-            <AnimatedSlider
-              value={config.ram_frames}
-              onValueChange={(val) => setConfig({ ...config, ram_frames: val })}
-              min={4}
-              max={64}
-              step={4}
-              color="emerald"
-              label="RAM Size"
-              unit="frames"
-            />
-          </div>
-        </div>
+        <AnimatedSlider
+          value={config.ram_frames}
+          onValueChange={(val) => setConfig({ ...config, ram_frames: val })}
+          min={4}
+          max={64}
+          step={4}
+          color="emerald"
+          label="ขนาด RAM"
+          unit="frames"
+        />
 
-        {/* Page Replacement */}
-        <div>
-          <label className="block text-[11px] font-bold text-slate-700 mb-1 tracking-wide">
-            อัลกอริทึมจัดการหน้า <span className="text-slate-400 font-normal">(Page Replacement)</span>
-          </label>
-          <select 
+        <Field id="cp-replacement" label="อัลกอริทึมแทนที่หน้า" hint="Page replacement">
+          <select
+            id="cp-replacement"
             value={config.replacement}
             onChange={(e) => setConfig({ ...config, replacement: e.target.value })}
-            className="w-full bg-slate-50 border border-border-subtle hover:border-pastel-blue rounded-md px-2.5 py-1.5 text-slate-800 text-xs focus:border-blue-500 focus:outline-none transition shadow-inner font-semibold"
+            className={SELECT}
           >
             <option value="lru">LRU (Least Recently Used)</option>
             <option value="fifo">FIFO (First-In, First-Out)</option>
             <option value="clock">Clock / Second Chance</option>
           </select>
-        </div>
+        </Field>
       </div>
 
-      <button 
+      <button
         onClick={handleSimulate}
         disabled={loading}
-        className="w-full mt-2 bg-gradient-to-r from-pastel-blue to-pastel-purple hover:from-blue-300 hover:to-purple-300 active:scale-95 text-slate-800 font-bold py-2.5 px-3 rounded-lg flex items-center justify-center space-x-2 text-xs transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed border border-white/40"
+        className="w-full flex items-center justify-center gap-2 bg-primary text-white hover:bg-primary-hover rounded-md py-2.5 px-3 text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {loading ? (
           <>
@@ -176,7 +182,7 @@ export default function ControlPanel() {
         ) : (
           <>
             <Play size={14} fill="currentColor" />
-            <span>เริ่มการจำลอง (Run Simulation)</span>
+            <span>Run simulation</span>
           </>
         )}
       </button>

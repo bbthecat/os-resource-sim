@@ -11,53 +11,50 @@ export default function MemoryGrid() {
   if (!current) return null;
 
   return (
-    <div className="glass-panel border border-border-subtle rounded-xl p-4 space-y-3">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-subtle pb-2">
-        <div className="flex items-center space-x-2">
-          <div className="p-1.5 bg-pastel-green/30 rounded-lg shadow-sm border border-pastel-green">
-            <Layers className="text-emerald-600" size={16} />
-          </div>
-          <div>
-            <h3 className="text-xs font-bold text-slate-800 tracking-wide">
-              ตารางจัดสรรช่องหน่วยความจำกายภาพ ({current.frames.length} Physical Frames)
-            </h3>
-            <p className="text-[10px] text-slate-500 font-mono tracking-wider">
-              RAM PAGE-FRAME TABLE & ALLOCATION MATRIX
-            </p>
-          </div>
+    <section className="bg-surface border border-line rounded-xl p-4 sm:p-5 space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
+            <Layers size={16} className="text-muted" />
+            ตารางจัดสรรช่องหน่วยความจำกายภาพ
+          </h3>
+          <p className="mt-0.5 text-sm text-muted">
+            แรมมีทั้งหมด <span className="font-mono tabular-nums">{current.frames.length}</span> physical frames
+            แต่ละช่องแสดงโปรเซสที่ครอบครองอยู่
+          </p>
         </div>
-        <div className="flex items-center space-x-3 text-[11px] text-slate-500 font-mono font-semibold">
-          <span className="flex items-center space-x-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-slate-100 border border-slate-300 inline-block" />
-            <span>FREE</span>
+        <div className="flex items-center gap-3 text-xs text-muted shrink-0">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-[3px] bg-surface-muted border border-line inline-block" />
+            <span>ว่าง</span>
           </span>
-          <span className="flex items-center space-x-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block" />
-            <span>OCCUPIED</span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-[3px] bg-primary-soft border border-primary/60 inline-block" />
+            <span>มีโปรเซสใช้งาน</span>
           </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-4 sm:grid-cols-8 md:grid-cols-16 gap-1.5 pt-0.5">
+      <div className="grid grid-cols-4 sm:grid-cols-8 md:grid-cols-[repeat(16,minmax(0,1fr))] gap-1.5">
         {current.frames.map((ownerPid, idx) => {
           const isOccupied = ownerPid !== null;
+          const color = pidColor(ownerPid);
           return (
             <div
               key={idx}
-              className={`flex flex-col items-center justify-center p-1.5 rounded-md border text-center transition-all ${
-                isOccupied
-                  ? 'border-transparent shadow-sm'
-                  : 'bg-slate-50 border-border-subtle text-slate-400'
+              className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-md border text-center transition-colors ${
+                isOccupied ? '' : 'bg-surface-muted border-line text-subtle'
               }`}
-              style={{
-                backgroundColor: isOccupied ? `${pidColor(ownerPid)}25` : undefined,
-                borderColor: isOccupied ? pidColor(ownerPid) : undefined,
-              }}
+              style={
+                isOccupied
+                  ? { backgroundColor: `${color}1F`, borderColor: `${color}80` }
+                  : undefined
+              }
             >
-              <span className="text-[9px] text-slate-500 font-mono font-bold">F{idx}</span>
-              <span 
-                className="font-mono font-bold text-xs mt-0.5"
-                style={{ color: isOccupied ? pidColor(ownerPid) : '#94a3b8' }}
+              <span className="text-xs text-subtle font-mono tabular-nums">F{idx}</span>
+              <span
+                className="font-mono font-semibold text-xs mt-0.5"
+                style={isOccupied ? { color } : undefined}
               >
                 {isOccupied ? `P${ownerPid}` : '·'}
               </span>
@@ -65,6 +62,6 @@ export default function MemoryGrid() {
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

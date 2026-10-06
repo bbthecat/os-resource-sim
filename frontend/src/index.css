@@ -3,29 +3,60 @@
 @tailwind utilities;
 
 @layer base {
+  /* Sage Forest — space-separated RGB channels so Tailwind opacity modifiers work */
+  :root {
+    --canvas: 245 248 244;          /* #F5F8F4 */
+    --surface: 255 255 255;         /* #FFFFFF */
+    --surface-muted: 238 243 236;   /* #EEF3EC */
+    --line: 223 232 220;            /* #DFE8DC */
+    --line-strong: 201 214 197;     /* #C9D6C5 */
+    --ink: 31 42 31;                /* #1F2A1F */
+    --muted: 102 120 106;           /* #66786A */
+    --subtle: 148 163 151;          /* #94A397 */
+
+    --primary: 63 125 88;           /* #3F7D58 */
+    --primary-hover: 51 104 72;     /* #336848 */
+    --primary-soft: 220 239 226;    /* #DCEFE2 */
+    --primary-ink: 36 83 56;        /* #245338 */
+
+    --warning: 180 83 9;            /* #B45309 */
+    --warning-soft: 253 246 234;    /* #FDF6EA */
+    --warning-line: 243 217 168;    /* #F3D9A8 */
+    --danger: 194 65 12;            /* #C2410C */
+    --danger-soft: 253 237 230;     /* #FDEDE6 */
+    --danger-line: 245 199 180;     /* #F5C7B4 */
+    --info: 47 111 168;             /* #2F6FA8 */
+    --info-soft: 225 236 246;       /* #E1ECF6 */
+
+    --night: 31 42 31;              /* #1F2A1F */
+    --night-raised: 42 56 46;       /* #2A382E */
+    --night-line: 52 68 58;         /* #34443A */
+    --night-text: 233 240 230;      /* #E9F0E6 */
+    --night-muted: 157 176 160;     /* #9DB0A0 */
+    --night-signal: 245 158 11;     /* #F59E0B — alert dot on dark */
+  }
+
   body {
-    @apply bg-background text-slate-700 min-h-screen font-sans overflow-x-hidden;
-    /* Soft pastel animated background */
-    background: linear-gradient(-45deg, #fcfaf9, #fdf3b8, #f8a5c2, #9adcfb);
-    background-size: 400% 400%;
-    animation: gradientBG 15s ease infinite;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    @apply bg-canvas text-ink min-h-screen font-sans antialiased overflow-x-hidden;
+  }
+
+  ::selection {
+    @apply bg-primary-soft text-primary-ink;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary/60 ring-offset-2 ring-offset-canvas;
   }
 }
 
-@keyframes gradientBG {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
-@keyframes float {
-  0% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-20px) rotate(5deg); }
-  100% { transform: translateY(0px) rotate(0deg); }
-}
-
-/* Custom modern scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -34,20 +65,9 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgb(var(--line-strong));
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-@layer utilities {
-  .glass-panel {
-    @apply bg-white/60 backdrop-blur-xl border border-white shadow-[0_8px_32px_0_rgba(154,220,251,0.2)];
-  }
-  
-  .blob-shape {
-    @apply absolute rounded-full mix-blend-multiply filter blur-2xl opacity-60 pointer-events-none;
-    animation: float 8s ease-in-out infinite;
-  }
+  background: rgb(var(--subtle));
 }

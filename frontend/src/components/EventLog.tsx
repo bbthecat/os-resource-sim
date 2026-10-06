@@ -21,75 +21,81 @@ export default function EventLog() {
 
   const formatEventBadge = (eventStr: string) => {
     const [action, target] = eventStr.split(':');
-    let colorClass = 'bg-gray-800 text-gray-300 border-gray-700';
+    let toneClass = 'text-ink';
     let thaiAction = action;
+    // unrecognised events show the raw action string, so they stay monospaced
+    let isRaw = true;
 
     if (action.includes('page_fault')) {
-      colorClass = 'bg-rose-950/60 text-rose-300 border-rose-500/40';
+      toneClass = 'text-danger';
       thaiAction = 'เกิด Page Fault (หาในแรมไม่เจอ)';
+      isRaw = false;
     } else if (action.includes('evict')) {
-      colorClass = 'bg-amber-950/60 text-amber-300 border-amber-500/40';
+      toneClass = 'text-warning';
       thaiAction = 'เตะหน้าออกจากแรม (Evict)';
+      isRaw = false;
     } else if (action.includes('io_done')) {
-      colorClass = 'bg-blue-950/60 text-blue-300 border-blue-500/40';
+      toneClass = 'text-info';
       thaiAction = 'อ่านเขียนดิสก์เสร็จ (I/O Done)';
+      isRaw = false;
     } else if (action.includes('arrive')) {
-      colorClass = 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40';
       thaiAction = 'โปรเซสเข้าสู่ระบบ (Arrive)';
+      isRaw = false;
     } else if (action.includes('preempt')) {
-      colorClass = 'bg-purple-950/60 text-purple-300 border-purple-500/40';
       thaiAction = 'หมดโควตาเวลา โดนสลับออก (Preempt)';
+      isRaw = false;
     } else if (action.includes('finish') || action.includes('done')) {
-      colorClass = 'bg-gray-700 text-gray-200 border-gray-600';
+      toneClass = 'text-primary';
       thaiAction = 'ทำงานเสร็จสิ้น (Finish)';
+      isRaw = false;
     }
 
     return (
-      <span className={`px-2 py-0.5 rounded text-[11px] font-mono border ${colorClass}`}>
-        <strong className="font-sans font-semibold">{thaiAction}</strong> {target ? `→ P${target}` : ''}
+      <span className="flex items-baseline gap-2 min-w-0 font-mono text-xs">
+        <span className={`${isRaw ? '' : 'font-sans text-sm'} font-medium ${toneClass}`}>{thaiAction}</span>
+        {target && <span className="text-muted">P{target}</span>}
       </span>
     );
   };
 
   return (
-    <div className="bg-surface border border-border-subtle rounded-lg p-3.5 space-y-3 shadow-subtle">
-      <div className="flex items-center justify-between border-b border-border-subtle pb-2">
-        <div className="flex items-center space-x-2">
-          <Activity className="text-blue-400" size={16} />
-          <div>
-            <h3 className="text-xs font-semibold text-zinc-200">บันทึกเหตุการณ์เคอร์เนล</h3>
-            <p className="text-[10px] text-zinc-500 font-mono">KERNEL EVENT TELEMETRY (DMESG)</p>
-          </div>
+    <section className="bg-surface border border-line rounded-xl p-4 sm:p-5 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
+            <Activity size={16} className="text-muted" />
+            บันทึกเหตุการณ์เคอร์เนล
+          </h3>
+          <p className="mt-0.5 text-sm text-muted">เหตุการณ์ย้อนหลัง 15 tick นับจากตำแหน่งปัจจุบัน</p>
         </div>
-        <span className="text-[11px] text-zinc-400 font-mono">TICK {currentTick}</span>
+        <span className="shrink-0 text-xs text-muted">
+          Tick <span className="font-mono tabular-nums text-ink">{currentTick}</span>
+        </span>
       </div>
 
-      <div className="max-h-[220px] overflow-y-auto space-y-1.5 pr-1 text-xs">
+      <div className="max-h-[220px] overflow-y-auto rounded-lg border border-line">
         {recentEvents.length > 0 ? (
-          recentEvents.map((item, idx) => (
-            <div 
-              key={idx} 
-              className={`flex items-center justify-between p-1.5 rounded transition ${
-                item.tick === currentTick 
-                  ? 'bg-blue-950/40 border border-blue-500/40' 
-                  : 'bg-surface-raised/40 border border-border-subtle'
-              }`}
-            >
-              <div className="flex items-center space-x-2">
-                <span className="font-mono text-zinc-500 text-[10px]">T+{item.tick}</span>
-                {formatEventBadge(item.event)}
-              </div>
-              {item.tick === currentTick && (
-                <span className="text-[9px] font-mono text-blue-400 font-medium tracking-wider">ACTIVE</span>
-              )}
-            </div>
-          ))
+          <ul className="divide-y divide-line">
+            {recentEvents.map((item, idx) => {
+              const isCurrent = item.tick === currentTick;
+              return (
+                <li
+                  key={idx}
+                  className={`flex items-center gap-3 px-3 py-1.5 ${isCurrent ? 'bg-primary-soft/50' : ''}`}
+                >
+                  <span className="w-12 shrink-0 font-mono text-xs text-subtle tabular-nums">T+{item.tick}</span>
+                  {formatEventBadge(item.event)}
+                  {isCurrent && (
+                    <span className="ml-auto shrink-0 text-xs font-medium text-primary">ปัจจุบัน</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         ) : (
-          <div className="text-zinc-600 font-mono text-center py-6 text-xs">
-            NO KERNEL EVENTS RECORDED
-          </div>
+          <div className="text-subtle text-center py-6 text-sm">ไม่มีเหตุการณ์เคอร์เนลในช่วงนี้</div>
         )}
       </div>
-    </div>
+    </section>
   );
 }

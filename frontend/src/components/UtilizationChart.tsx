@@ -1,29 +1,68 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type CSSProperties } from 'react';
 import { useSimStore } from '../store/useSimStore';
-import { 
-  ResponsiveContainer, 
-  LineChart, 
-  Line, 
-  BarChart, 
-  Bar, 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ReferenceLine,
   Legend
 } from 'recharts';
 import { TrendingUp, Layers, BarChart2 } from 'lucide-react';
+import { CHART } from '../lib/colors';
+
+type ChartMode = 'utilization' | 'queues' | 'processes';
+
+const MODES: { id: ChartMode; label: string }[] = [
+  { id: 'utilization', label: 'Utilization' },
+  { id: 'queues', label: 'Queues' },
+  { id: 'processes', label: 'Processes' },
+];
+
+const MONO = '"IBM Plex Mono", ui-monospace, Consolas, monospace';
+
+// The current-tick marker is ink, same as the Gantt chart's
+const MARKER = CHART.tooltipText;
+
+const AXIS_TICK = { fill: CHART.axis, fontSize: 11, fontFamily: MONO };
+const AXIS_LINE = { stroke: CHART.grid };
+
+const TOOLTIP_STYLE: CSSProperties = {
+  backgroundColor: CHART.tooltipBg,
+  border: `1px solid ${CHART.tooltipBorder}`,
+  borderRadius: '6px',
+  boxShadow: '0 12px 32px -8px rgb(var(--ink) / 0.18), 0 2px 6px rgb(var(--ink) / 0.06)',
+  fontSize: '12px',
+  color: CHART.tooltipText,
+  padding: '8px 12px',
+};
+const TOOLTIP_LABEL_STYLE: CSSProperties = { color: CHART.tooltipText, fontWeight: 600, marginBottom: 2 };
+
+const LEGEND_STYLE: CSSProperties = { fontSize: '12px', paddingBottom: '8px' };
+
+const markerLabel = (tick: number) => ({
+  value: `T=${tick}`,
+  fill: MARKER,
+  fontSize: 11,
+  position: 'top' as const,
+  fontFamily: MONO,
+});
 
 export default function UtilizationChart() {
   const { result, currentTick } = useSimStore();
-  const [chartMode, setChartMode] = useState<'utilization' | 'queues' | 'processes'>('utilization');
+  const [chartMode, setChartMode] = useState<ChartMode>('utilization');
 
   // Timeline Data for Utilization and Queue depths
   const timelineData = useMemo(() => {
     if (!result || !result.snapshots) return [];
-    
+
     // Sample if snapshots are very large (> 200 ticks) so graph renders fast and smooth
     const step = Math.max(1, Math.floor(result.snapshots.length / 160));
     const points = [];
@@ -60,53 +99,42 @@ export default function UtilizationChart() {
   if (!result || timelineData.length === 0) return null;
 
   return (
-    <div className="bg-surface border border-border-subtle rounded-lg p-3.5 space-y-3 shadow-subtle">
+    <section className="bg-surface border border-line rounded-xl p-4 sm:p-5 space-y-4">
       {/* Header with Chart Mode Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-2.5">
-        <div className="flex items-center space-x-2">
-          {chartMode === 'utilization' && <TrendingUp className="text-blue-400" size={16} />}
-          {chartMode === 'queues' && <Layers className="text-amber-400" size={16} />}
-          {chartMode === 'processes' && <BarChart2 className="text-emerald-400" size={16} />}
-          <div>
-            <h3 className="text-xs font-semibold text-zinc-200">
-              {chartMode === 'utilization' && 'กราฟการใช้ทรัพยากรตามเวลา (Resource Telemetry Timeline)'}
-              {chartMode === 'queues' && 'กราฟความลึกของคิวในระบบ (Queue Depths Timeline)'}
-              {chartMode === 'processes' && 'การเปรียบเทียบประสิทธิภาพรายโปรเซส (Process Benchmark)'}
-            </h3>
-            <p className="text-[10px] text-zinc-500 font-mono">
-              {chartMode === 'utilization' && 'CPU %, RAM % & DISK I/O UTILIZATION PROFILE'}
-              {chartMode === 'queues' && 'READY, DISK WAIT & MEMORY WAIT PROCESS COUNTS'}
-              {chartMode === 'processes' && 'TURNAROUND VS WAIT TIME METRICS PER PID'}
-            </p>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
+            {chartMode === 'utilization' && <TrendingUp className="text-muted" size={16} />}
+            {chartMode === 'queues' && <Layers className="text-muted" size={16} />}
+            {chartMode === 'processes' && <BarChart2 className="text-muted" size={16} />}
+            {chartMode === 'utilization' && 'การใช้ทรัพยากรตามเวลา'}
+            {chartMode === 'queues' && 'ความยาวคิวตามเวลา'}
+            {chartMode === 'processes' && 'เปรียบเทียบรายโปรเซส'}
+          </h3>
+          <p className="mt-0.5 text-sm text-muted">
+            {chartMode === 'utilization' && 'เปอร์เซ็นต์การใช้ CPU, RAM และดิสก์ในแต่ละ tick'}
+            {chartMode === 'queues' && 'จำนวน process ใน ready queue, ที่รอดิสก์ และที่รอหน่วยความจำ'}
+            {chartMode === 'processes' && 'Turnaround time เทียบกับ wait time ของแต่ละ process'}
+          </p>
         </div>
 
-        {/* Tab Buttons */}
-        <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-          <button
-            onClick={() => setChartMode('utilization')}
-            className={`px-3 py-1 rounded-lg text-xs transition font-medium ${
-              chartMode === 'utilization' ? 'bg-white text-blue-700 font-bold shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Utilization
-          </button>
-          <button
-            onClick={() => setChartMode('queues')}
-            className={`px-3 py-1 rounded-lg text-xs transition font-medium ${
-              chartMode === 'queues' ? 'bg-white text-blue-700 font-bold shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Queues
-          </button>
-          <button
-            onClick={() => setChartMode('processes')}
-            className={`px-3 py-1 rounded-lg text-xs transition font-medium ${
-              chartMode === 'processes' ? 'bg-white text-blue-700 font-bold shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Processes
-          </button>
+        {/* Mode switcher */}
+        <div className="self-start flex items-center bg-surface-muted p-1 rounded-lg">
+          {MODES.map((m) => {
+            const selected = chartMode === m.id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => setChartMode(m.id)}
+                aria-pressed={selected}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                  selected ? 'bg-surface text-ink shadow-card' : 'text-muted hover:text-ink'
+                }`}
+              >
+                {m.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -115,30 +143,39 @@ export default function UtilizationChart() {
         {chartMode === 'utilization' && (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={timelineData}>
-              <XAxis 
-                dataKey="tick" 
-                stroke="#4b5563" 
-                fontSize={10} 
+              <CartesianGrid stroke={CHART.grid} vertical={false} />
+              <XAxis
+                dataKey="tick"
+                tick={AXIS_TICK}
+                axisLine={AXIS_LINE}
+                tickLine={false}
                 tickFormatter={(v) => `T+${v}`}
-                fontFamily="JetBrains Mono, monospace"
               />
-              <YAxis stroke="#4b5563" fontSize={10} domain={[0, 100]} unit="%" fontFamily="JetBrains Mono, monospace" />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#10141d', borderColor: '#1e2433', borderRadius: '6px', fontSize: '11px', color: '#e4e4e7', fontFamily: 'JetBrains Mono, monospace' }}
+              <YAxis
+                tick={AXIS_TICK}
+                axisLine={false}
+                tickLine={false}
+                domain={[0, 100]}
+                unit="%"
+              />
+              <Tooltip
+                contentStyle={TOOLTIP_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                cursor={{ stroke: CHART.grid }}
                 formatter={(value: any, name: string) => {
                   const labelMap: Record<string, string> = {
-                    cpu: 'CPU Util',
-                    ram: 'RAM Util',
+                    cpu: 'CPU util',
+                    ram: 'RAM util',
                     io: 'Disk I/O',
                   };
                   return [`${value}%`, labelMap[name] || name];
                 }}
                 labelFormatter={(label) => `T+${label}`}
               />
-              <Legend 
-                verticalAlign="top" 
-                align="right" 
-                wrapperStyle={{ fontSize: '11px', paddingBottom: '8px', fontFamily: 'JetBrains Mono, monospace' }}
+              <Legend
+                verticalAlign="top"
+                align="right"
+                wrapperStyle={LEGEND_STYLE}
                 formatter={(value) => {
                   const map: Record<string, string> = {
                     cpu: 'CPU',
@@ -148,15 +185,15 @@ export default function UtilizationChart() {
                   return map[value] || value;
                 }}
               />
-              <ReferenceLine 
-                x={currentTick} 
-                stroke="#3b82f6" 
-                strokeDasharray="3 3" 
-                label={{ value: `T=${currentTick}`, fill: '#60a5fa', fontSize: 10, position: 'top', fontFamily: 'JetBrains Mono, monospace' }} 
+              <ReferenceLine
+                x={currentTick}
+                stroke={MARKER}
+                strokeDasharray="3 3"
+                label={markerLabel(currentTick)}
               />
-              <Line type="monotone" dataKey="cpu" stroke="#3b82f6" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line type="monotone" dataKey="ram" stroke="#10b981" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line type="monotone" dataKey="io" stroke="#f59e0b" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="cpu" stroke={CHART.cpu} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="ram" stroke={CHART.ram} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="io" stroke={CHART.disk} strokeWidth={1.5} dot={false} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         )}
@@ -164,48 +201,51 @@ export default function UtilizationChart() {
         {chartMode === 'queues' && (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={timelineData}>
-              <XAxis 
-                dataKey="tick" 
-                stroke="#4b5563" 
-                fontSize={10} 
+              <CartesianGrid stroke={CHART.grid} vertical={false} />
+              <XAxis
+                dataKey="tick"
+                tick={AXIS_TICK}
+                axisLine={AXIS_LINE}
+                tickLine={false}
                 tickFormatter={(v) => `T+${v}`}
-                fontFamily="JetBrains Mono, monospace"
               />
-              <YAxis stroke="#4b5563" fontSize={10} allowDecimals={false} fontFamily="JetBrains Mono, monospace" />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#10141d', borderColor: '#1e2433', borderRadius: '6px', fontSize: '11px', color: '#e4e4e7', fontFamily: 'JetBrains Mono, monospace' }}
+              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip
+                contentStyle={TOOLTIP_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                cursor={{ stroke: CHART.grid }}
                 formatter={(value: any, name: string) => {
                   const labelMap: Record<string, string> = {
-                    readyQueue: 'Ready Queue',
+                    readyQueue: 'Ready queue',
                     ioQueue: 'Waiting I/O',
-                    memQueue: 'Page Fault Wait',
+                    memQueue: 'Page fault wait',
                   };
                   return [`${value}`, labelMap[name] || name];
                 }}
                 labelFormatter={(label) => `T+${label}`}
               />
-              <Legend 
-                verticalAlign="top" 
-                align="right" 
-                wrapperStyle={{ fontSize: '11px', paddingBottom: '8px', fontFamily: 'JetBrains Mono, monospace' }}
+              <Legend
+                verticalAlign="top"
+                align="right"
+                wrapperStyle={LEGEND_STYLE}
                 formatter={(value) => {
                   const map: Record<string, string> = {
                     readyQueue: 'Ready',
                     ioQueue: 'Waiting I/O',
-                    memQueue: 'Wait Mem',
+                    memQueue: 'Wait mem',
                   };
                   return map[value] || value;
                 }}
               />
-              <ReferenceLine 
-                x={currentTick} 
-                stroke="#3b82f6" 
-                strokeDasharray="3 3" 
-                label={{ value: `T=${currentTick}`, fill: '#60a5fa', fontSize: 10, position: 'top', fontFamily: 'JetBrains Mono, monospace' }} 
+              <ReferenceLine
+                x={currentTick}
+                stroke={MARKER}
+                strokeDasharray="3 3"
+                label={markerLabel(currentTick)}
               />
-              <Area type="monotone" dataKey="readyQueue" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} isAnimationActive={false} />
-              <Area type="monotone" dataKey="ioQueue" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.2} isAnimationActive={false} />
-              <Area type="monotone" dataKey="memQueue" stroke="#ec4899" fill="#ec4899" fillOpacity={0.2} isAnimationActive={false} />
+              <Area type="monotone" dataKey="readyQueue" stroke={CHART.ready} fill={CHART.ready} fillOpacity={0.15} isAnimationActive={false} />
+              <Area type="monotone" dataKey="ioQueue" stroke={CHART.io} fill={CHART.io} fillOpacity={0.15} isAnimationActive={false} />
+              <Area type="monotone" dataKey="memQueue" stroke={CHART.mem} fill={CHART.mem} fillOpacity={0.15} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         )}
@@ -213,36 +253,39 @@ export default function UtilizationChart() {
         {chartMode === 'processes' && (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={processData}>
-              <XAxis dataKey="name" stroke="#4b5563" fontSize={10} fontFamily="JetBrains Mono, monospace" />
-              <YAxis stroke="#4b5563" fontSize={10} unit=" t" fontFamily="JetBrains Mono, monospace" />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#10141d', borderColor: '#1e2433', borderRadius: '6px', fontSize: '11px', color: '#e4e4e7', fontFamily: 'JetBrains Mono, monospace' }}
+              <CartesianGrid stroke={CHART.grid} vertical={false} />
+              <XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
+              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} unit=" t" />
+              <Tooltip
+                contentStyle={TOOLTIP_STYLE}
+                labelStyle={TOOLTIP_LABEL_STYLE}
+                cursor={{ fill: CHART.grid, fillOpacity: 0.6 }}
                 formatter={(value: any, name: string) => {
                   const labelMap: Record<string, string> = {
-                    turnaround: 'Turnaround Time',
-                    waitTime: 'Wait Time',
+                    turnaround: 'Turnaround time',
+                    waitTime: 'Wait time',
                   };
                   return [`${value} ticks`, labelMap[name] || name];
                 }}
               />
-              <Legend 
-                verticalAlign="top" 
-                align="right" 
-                wrapperStyle={{ fontSize: '11px', paddingBottom: '8px', fontFamily: 'JetBrains Mono, monospace' }}
+              <Legend
+                verticalAlign="top"
+                align="right"
+                wrapperStyle={LEGEND_STYLE}
                 formatter={(value) => {
                   const map: Record<string, string> = {
-                    turnaround: 'Turnaround Time',
-                    waitTime: 'Wait Time',
+                    turnaround: 'Turnaround time',
+                    waitTime: 'Wait time',
                   };
                   return map[value] || value;
                 }}
               />
-              <Bar dataKey="turnaround" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="waitTime" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="turnaround" fill={CHART.cpu} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="waitTime" fill={CHART.disk} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}
       </div>
-    </div>
+    </section>
   );
 }

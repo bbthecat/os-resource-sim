@@ -1,27 +1,18 @@
 import { useState, useMemo } from 'react';
 import { useSimStore } from '../store/useSimStore';
-import { 
-  Lightbulb, CheckCircle2, AlertOctagon, TrendingUp, 
-  Cpu, HardDrive, Layers, ChevronDown, ChevronUp, 
-  FastForward, ShieldCheck, Activity, HelpCircle, Radio, BarChart3
-} from 'lucide-react';
+import { CheckCircle2, AlertTriangle, ChevronDown, FastForward, Radio, BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// The verdict for the overview tab: open content on the page background, not a card
 export default function ExecutiveSummary() {
   const { result, currentTick, setTick } = useSimStore();
   const [showLogic, setShowLogic] = useState(false);
   const [viewMode, setViewMode] = useState<'live' | 'overall'>('live');
 
-  if (!result || !result.diagnosis) return null;
-
-  const { diagnosis, metrics } = result;
-  const isHealthy = diagnosis.label === 'BALANCED' || diagnosis.label === 'UNDERUTILIZED';
-  const maxTick = result.snapshots ? Math.max(0, result.snapshots.length - 1) : 0;
-  const isAtEnd = currentTick >= maxTick;
-
   // Real-time live cumulative metrics up to currentTick
+  // (computed before the early return so the hook order stays stable between renders)
   const liveMetrics = useMemo(() => {
-    if (!result.snapshots || result.snapshots.length === 0) return null;
+    if (!result?.snapshots || result.snapshots.length === 0) return null;
     const count = Math.min(currentTick + 1, result.snapshots.length);
     const snaps = result.snapshots.slice(0, count);
     const n = snaps.length || 1;
@@ -40,7 +31,7 @@ export default function ExecutiveSummary() {
     });
 
     const lastSnap = snaps[snaps.length - 1];
-    const readyQueueLen = lastSnap && lastSnap.ready ? lastSnap.ready.length : 0;
+    const readyQueueLen = lastSnap?.ready ? lastSnap.ready.length : 0;
 
     let finishedProcs = 0;
     if (result.metrics && (result.metrics as any).per_process) {
@@ -66,6 +57,14 @@ export default function ExecutiveSummary() {
       finishedProcs,
     };
   }, [result, currentTick]);
+
+  if (!result?.diagnosis) return null;
+
+  const { diagnosis, metrics } = result;
+  const isHealthy = diagnosis.label === 'BALANCED' || diagnosis.label === 'UNDERUTILIZED';
+  const isCritical = diagnosis.label === 'THRASHING';
+  const maxTick = result.snapshots ? Math.max(0, result.snapshots.length - 1) : 0;
+  const isAtEnd = currentTick >= maxTick;
 
   // Display metrics depending on viewMode (Live vs Overall)
   const isLive = viewMode === 'live' && !isAtEnd;
@@ -104,267 +103,137 @@ export default function ExecutiveSummary() {
     }
   };
 
+  const stats = [
+    { label: 'CPU ใช้งาน', value: activeMetrics.cpu },
+    { label: 'Disk ใช้งาน', value: activeMetrics.disk },
+    { label: 'อัตรา page fault', value: activeMetrics.fault },
+    { label: 'Thrashing', value: activeMetrics.thrash },
+    { label: 'คิว Ready', value: activeMetrics.ready },
+    { label: 'ทำงานเสร็จ', value: activeMetrics.finished },
+  ];
+
+  const modes = [
+    { id: 'live' as const, label: 'Real-time', Icon: Radio },
+    { id: 'overall' as const, label: 'ภาพรวมทั้งหมด', Icon: BarChart3 },
+  ];
+
+  const StatusIcon = isHealthy ? CheckCircle2 : AlertTriangle;
+  let statusIconTone = 'text-warning';
+  if (isHealthy) statusIconTone = 'text-primary';
+  else if (isCritical) statusIconTone = 'text-danger';
+
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`glass-panel border-l-4 rounded-2xl p-5 sm:p-6 shadow-card relative overflow-hidden transition-all duration-300 ${
-        isHealthy ? 'border-l-emerald-400' : 'border-l-amber-400'
-      }`}
-    >
-      <div className={`absolute inset-0 opacity-40 bg-gradient-to-r pointer-events-none ${
-        isHealthy ? 'from-pastel-green/30 to-transparent' : 'from-pastel-yellow/30 to-transparent'
-      }`}></div>
-      
-      <div className="relative z-10 space-y-4">
-        {/* Top Header Row */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl shadow-glow ${
-              isHealthy ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-100'
-            }`}>
-              {isHealthy ? <CheckCircle2 size={24} /> : <AlertOctagon size={24} />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg font-bold text-slate-800">
-                  {isLive ? 'สถานะ Real-time Telemetry (ขณะกำลังจำลอง)' : 'สรุปผลการประเมินภาพรวมหลังรันเสร็จ (Post-Run Summary)'}
-                </h2>
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
-                  isHealthy ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
-                }`}>
-                  {isHealthy ? 'ระบบสมดุล (STABLE)' : 'พบคอขวด (BOTTLENECK)'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-                <ShieldCheck size={14} className="text-blue-500" />
-                {isLive 
-                  ? `คำนวณสดสะสมตามเวลาจริงถึง Tick ${currentTick} (100% Deterministic • ไม่ใช้ AI)` 
-                  : `ประเมินจากสถิติจริงตลอดการจำลอง ${maxTick} Ticks • คำนวณด้วย Rule-based Heuristics (ไม่ใช่ AI)`}
-              </p>
-            </div>
-          </div>
+    <section aria-labelledby="executive-summary-title" className="space-y-5">
+      {/* Context line + view controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted">
+          {isLive ? 'แนวโน้มการวินิจฉัยจากการรันทั้งหมด' : 'ผลการวินิจฉัยหลังรันจบ'}
+        </p>
 
-          {/* Mode Switcher & Tick Info */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner text-xs">
-              <button
-                onClick={() => setViewMode('live')}
-                className={`px-2.5 py-1 rounded-lg font-medium flex items-center gap-1.5 transition-all ${
-                  viewMode === 'live' 
-                    ? 'bg-white text-blue-600 shadow-sm font-bold' 
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Radio size={12} className={viewMode === 'live' ? 'text-red-500 animate-pulse' : 'text-slate-400'} />
-                <span>Real-time (ตาม Tick)</span>
-              </button>
-              <button
-                onClick={() => setViewMode('overall')}
-                className={`px-2.5 py-1 rounded-lg font-medium flex items-center gap-1.5 transition-all ${
-                  viewMode === 'overall' 
-                    ? 'bg-white text-blue-600 shadow-sm font-bold' 
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <BarChart3 size={12} className={viewMode === 'overall' ? 'text-indigo-600' : 'text-slate-400'} />
-                <span>สรุปภาพรวมทั้งหมด</span>
-              </button>
-            </div>
-
-            {!isAtEnd && (
-              <button
-                onClick={() => setTick(maxTick)}
-                className="bg-white hover:bg-slate-50 text-blue-600 border border-blue-200 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition hover:scale-105 active:scale-95"
-                title="ข้ามไปดูจุดสิ้นสุดของการจำลอง"
-              >
-                <FastForward size={13} />
-                <span>ดูผลลัพธ์ท้ายสุด</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Dynamic Evaluated Metrics Pills (Now actively animating and computing per tick) */}
-        <div>
-          <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1.5 font-medium px-1">
-            <span className="flex items-center gap-1.5">
-              {isLive ? (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping inline-block" />
-                  <strong className="text-slate-700">สถิติสดสะสม ณ Tick {currentTick} / {maxTick}:</strong> (ตัวเลขจะอัปเดตแบบ Real-time เมื่อเล่น Timeline)
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={13} className="text-emerald-500" />
-                  <strong className="text-slate-700">สถิติภาพรวมตลอดการจำลอง ({maxTick} Ticks ทั้งหมด):</strong>
-                </>
-              )}
-            </span>
-            <span className="font-mono text-slate-400 text-[10px]">
-              Tick {currentTick} of {maxTick}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-            <motion.div 
-              key={`cpu-${activeMetrics.cpu}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><Cpu size={12} className="text-blue-500" /> CPU ใช้งาน</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.cpu}
-              </div>
-            </motion.div>
-
-            <motion.div 
-              key={`disk-${activeMetrics.disk}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><HardDrive size={12} className="text-purple-500" /> Disk I/O</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.disk}
-              </div>
-            </motion.div>
-
-            <motion.div 
-              key={`fault-${activeMetrics.fault}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><Layers size={12} className="text-amber-500" /> Page Fault</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.fault}
-              </div>
-            </motion.div>
-
-            <motion.div 
-              key={`thrash-${activeMetrics.thrash}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><AlertOctagon size={12} className="text-rose-500" /> Thrashing</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.thrash}
-              </div>
-            </motion.div>
-
-            <motion.div 
-              key={`ready-${activeMetrics.ready}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><Activity size={12} className="text-indigo-500" /> Ready คิว</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.ready}
-              </div>
-            </motion.div>
-
-            <motion.div 
-              key={`finished-${activeMetrics.finished}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-emerald-500" /> ทำงานเสร็จ</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.finished}
-              </div>
-            </motion.div>
-          </div>
-        </div>
-
-        {/* Diagnosis & Recommendation Content */}
-        <div className="bg-white/90 rounded-xl p-4 border border-white shadow-sm space-y-3">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 block mb-0.5">
-                {isLive ? 'แนวโน้มการวินิจฉัย (จากการรันภาพรวม):' : 'ผลการวินิจฉัยหลัก:'}
-              </span>
-              {isLive && (
-                <span className="text-[11px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium">
-                  กำลังเล่น Timeline • ผลสรุปเต็มจะเสร็จสมบูรณ์เมื่อถึง Tick {maxTick}
-                </span>
-              )}
-            </div>
-            <p className="text-base font-bold text-slate-800">
-              {diagnosis.title}
-            </p>
-          </div>
-
-          <div className="flex items-start gap-2.5 text-sm text-slate-700 bg-slate-50/70 p-3 rounded-lg border border-slate-100">
-            <Lightbulb className="text-amber-500 shrink-0 mt-0.5" size={17} />
-            <div className="leading-relaxed">
-              <span className="font-bold text-slate-800">การวิเคราะห์: </span>
-              {diagnosis.recommendation}
-            </div>
-          </div>
-          
-          {!isHealthy && diagnosis.suggested_config && Object.keys(diagnosis.suggested_config).length > 0 && (
-            <div className="flex items-start gap-2.5 text-sm text-slate-700 bg-blue-50/60 p-3 rounded-lg border border-blue-100">
-              <TrendingUp className="text-blue-600 shrink-0 mt-0.5" size={17} />
-              <div className="leading-relaxed">
-                <span className="font-bold text-slate-800">แนวทางปรับปรุง (What-If): </span> 
-                ลองปรับค่าคอนฟิก <span className="font-mono bg-white px-2 py-0.5 rounded text-xs text-blue-700 font-bold border border-blue-200">{Object.keys(diagnosis.suggested_config).join(', ')}</span> ในแถบด้านซ้าย แล้วกดรันใหม่ เพื่อเปรียบเทียบผลลัพธ์
-              </div>
-            </div>
-          )}
-
-          {/* Toggleable Rule Engine Logic (Proof of Dynamic Evaluation without AI) */}
-          <div className="pt-1">
-            <button
-              onClick={() => setShowLogic(!showLogic)}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
-            >
-              <HelpCircle size={14} className="text-slate-400" />
-              <span>ทำไมระบบถึงสรุปแบบนี้? ดูเกณฑ์ชี้วัดทางสถิติ (Rule Evaluation)</span>
-              {showLogic ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
-
-            <AnimatePresence>
-              {showLogic && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden mt-2 pt-2 border-t border-slate-100"
+        <div className="flex flex-wrap items-center gap-2">
+          <fieldset className="inline-flex bg-surface-muted p-1 rounded-lg">
+            <legend className="sr-only">มุมมองตัวเลข</legend>
+            {modes.map(({ id, label, Icon }) => {
+              const selected = viewMode === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setViewMode(id)}
+                  aria-pressed={selected}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium transition-colors ${
+                    selected ? 'bg-surface text-ink shadow-card' : 'text-muted hover:text-ink'
+                  }`}
                 >
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs text-slate-600 space-y-1.5 font-mono">
-                    <p className="font-sans font-bold text-slate-700">🔍 ที่มาของบทสรุป (อิงตามสมมติฐานและเงื่อนไขทฤษฎี OS ใน sim/analyzer.py):</p>
-                    <p className="font-sans text-slate-700 leading-relaxed bg-white p-2 rounded border border-slate-200">
-                      {getRuleExplanation()}
-                    </p>
-                    <div className="text-[11px] text-slate-500 pt-1 font-sans">
-                      * ไม่มีการใช้ AI หรือการสุ่มข้อความ ทุกข้อสรุปคำนวณสดจากสถิติจริงของรอบการจำลองนี้แบบ 100% Deterministic
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                  <Icon size={14} className={selected ? 'text-primary' : undefined} />
+                  {label}
+                </button>
+              );
+            })}
+          </fieldset>
+
+          {!isAtEnd && (
+            <button
+              onClick={() => setTick(maxTick)}
+              title="ข้ามไปดูจุดสิ้นสุดของการจำลอง"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surface border border-line text-sm font-medium text-ink hover:bg-surface-muted hover:border-line-strong transition-colors"
+            >
+              <FastForward size={14} className="text-muted" />
+              ดูผลท้ายสุด
+            </button>
+          )}
         </div>
       </div>
-    </motion.div>
+
+      {/* Verdict */}
+      <div className="space-y-2">
+        <h2
+          id="executive-summary-title"
+          className="flex items-start gap-2.5 text-xl sm:text-2xl font-semibold leading-snug text-ink"
+        >
+          <StatusIcon size={20} aria-hidden="true" className={`shrink-0 mt-1 sm:mt-1.5 ${statusIconTone}`} />
+          <span>
+            <span className="sr-only">{isHealthy ? 'ระบบสมดุล: ' : 'พบคอขวด: '}</span>
+            {diagnosis.title}
+          </span>
+        </h2>
+        <p className="text-muted leading-relaxed max-w-3xl">{diagnosis.recommendation}</p>
+      </div>
+
+      {/* Key stats */}
+      <div className="pt-4 border-t border-line">
+        <p className="text-xs text-muted mb-3">
+          {isLive ? (
+            <>
+              ตัวเลขสะสมถึง tick <span className="font-mono tabular-nums">{currentTick}</span> จาก{' '}
+              <span className="font-mono tabular-nums">{maxTick}</span> และอัปเดตตามไทม์ไลน์
+            </>
+          ) : (
+            <>
+              ค่าตลอดการจำลอง <span className="font-mono tabular-nums">{maxTick}</span> tick
+            </>
+          )}
+        </p>
+        <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-4">
+          {stats.map(({ label, value }) => (
+            <div key={label} className="min-w-0">
+              <dt className="text-xs text-muted">{label}</dt>
+              <dd className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      {/* Rule explanation */}
+      <div>
+        <button
+          onClick={() => setShowLogic(!showLogic)}
+          aria-expanded={showLogic}
+          aria-controls="executive-summary-logic"
+          className="inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink rounded-md transition-colors"
+        >
+          ทำไมระบบถึงสรุปแบบนี้
+          <ChevronDown size={15} className={`transition-transform ${showLogic ? 'rotate-180' : ''}`} />
+        </button>
+
+        <AnimatePresence initial={false}>
+          {showLogic && (
+            <motion.div
+              id="executive-summary-logic"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="mt-3 ml-1 pl-4 border-l-2 border-line space-y-2 max-w-3xl"
+            >
+              <p className="text-sm text-ink leading-relaxed">{getRuleExplanation()}</p>
+              <p className="text-xs text-muted leading-relaxed">
+                เกณฑ์มาจากเงื่อนไขตามทฤษฎี OS ใน <span className="font-mono">sim/analyzer.py</span>{' '}
+                ทุกข้อสรุปคำนวณจากสถิติจริงของการจำลองรอบนี้ ไม่ได้ใช้ AI หรือสุ่มข้อความ
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </section>
   );
 }
-
-
