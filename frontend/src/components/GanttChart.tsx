@@ -287,7 +287,7 @@ export default function GanttChart() {
                     <Tooltip.Root key={seg.start}>
                       <Tooltip.Trigger asChild>
                         <div
-                          className={`absolute top-1 bottom-1 flex items-center justify-center rounded-[3px] text-xs font-medium font-mono overflow-hidden transition-[filter] duration-150 hover:brightness-110 hover:z-10 ${
+                          className={`absolute top-1.5 bottom-1.5 flex items-center justify-center rounded-none text-xs font-medium font-mono overflow-hidden transition-[filter] duration-150 hover:brightness-110 hover:z-10 ${
                             isIdle ? 'text-muted' : 'text-white'
                           }`}
                           style={{
