@@ -31,12 +31,40 @@ RAM ไม่พอ ──▶ เกิด Page Fault ถี่ ──▶ Disk I
 | ระดับ | รายละเอียดฟีเจอร์ |
 |:---|:---|
 | 🧱 **แกนจำลอง OS (Core Engine)** | Process Model (PCB, States, Burst Cycles) · CPU Schedulers (FCFS, SJF, Round Robin, Priority) · คำนวณ Metrics เชิงลึก (Throughput, Turnaround, Waiting time, CPU/RAM/IO Util) |
-| ⭐ **ระบบหน่วยความจำและ I/O** | Memory Manager (Paging, Page Fault Detection, Frame Allocation) · Page Replacement (FIFO, LRU) · Thrashing Detection System · Disk I/O Queue Subsystem |
+| ⭐ **ระบบหน่วยความจำและ I/O** | Memory Manager (Paging, Page Fault Detection, Frame Allocation) · Page Replacement (FIFO, LRU, Clock) · Thrashing Detection System · Disk I/O Queue Subsystem |
 | 🚀 **การวิเคราะห์และแก้ปัญหา** | **Bottleneck Analyzer** วินิจฉัยคอขวดอัตโนมัติ (CPU-bound, Memory-bound, I/O-bound) · **What-If A/B Testing** เปรียบเทียบผลกระทบของ 2 การตั้งค่าแบบแบ่งหน้าจอ |
-| 💻 **Interactive Telemetry Dashboard** | ควบคุม Playback (Play/Pause, Step, Speed, Time Scrubbing) · Real-time Gantt Chart · Multi-resource Utilization Area Charts · Animated Queue Lanes · Memory Frame Matrix · Live Event Stream · Process Table |
+| 💻 **Interactive Telemetry Dashboard** | แถบ Timeline ที่เป็นทั้ง Gantt ย่อส่วนและตัวเลื่อนเวลา · 5 แท็บ (ภาพรวม / CPU / Memory / รายละเอียด / มุมมองของฉัน) · ทุกส่วนเดินตาม tick แบบ Real-time (Gantt, Page Replacement Trace, ตารางโปรเซส, ไทล์ตัวเลขพร้อม sparkline) · กรองตามโปรเซส · โหมดพรีเซนต์ · คีย์ลัด |
 | 🛠️ **เครื่องมือเสริม** | **Custom Workload Builder** (ออกแบบ Process เองได้ผ่าน GUI) · **Preset Scenarios** (จำลองสถานการณ์ตัวอย่าง 1 คลิก) · **Interactive User Guide Modal** · **Export Report** (PDF, HTML, JSON) |
 | 🧪 **ความน่าเชื่อถือและการทดสอบ** | ชุด Unit Test อัตโนมัติ (`pytest`) ครอบคลุม 100% ของ Engine Logic · สคริปต์ Benchmark การทดลองและวาดกราฟสำหรับรายงาน |
 | 🌐 **Deployment Ready** | รองรับการ Deploy ขึ้น **Vercel** ทันที (Full-Stack: Vite + Python Serverless) · รองรับ **Docker Compose** และไฟล์คลิกรัน **`start_dev.bat`** |
+
+---
+
+## 🧭 การใช้งานหน้าเว็บ (Dashboard Guide)
+
+1. **ตั้งค่าทางซ้าย** — เลือก Workload, อัลกอริทึม CPU Scheduling (การ์ด 4 แบบ), Time quantum, จำนวน RAM frames และอัลกอริทึมแทนที่หน้า (LRU / FIFO / Clock) แล้วกด **Run simulation**
+2. **แถบ Timeline สีเข้ม** — แสดงว่า CPU รันโปรเซสไหนตลอดทั้งรอบ คลิกหรือลากเพื่อกระโดดไปยัง tick ใดก็ได้ ทุกส่วนในหน้าจะแสดงสถานะ ณ tick นั้น
+3. **แท็บผลลัพธ์**
+
+| แท็บ | สิ่งที่อยู่ข้างใน |
+|:---|:---|
+| ภาพรวม | ผลวินิจฉัยคอขวด (แถบสีตามสถานะ) · ไทล์ตัวเลขพร้อม sparkline · คำแนะนำ · มาตรวัด CPU / RAM / Disk |
+| CPU | Gantt Chart (ซูม 10–100 tick และเลื่อนตามเวลาอัตโนมัติ, ชี้ชื่อโปรเซสเพื่อดูสรุป) · คิวโปรเซส · กราฟการใช้ทรัพยากรตามเวลา |
+| Memory | ตารางเฟรมในหน่วยความจำ · Page Replacement Trace แบบตำรา (เดินตามเวลา, hit/miss, ซ่อนเฟรมว่าง) |
+| รายละเอียด | ตารางสถิติรายโปรเซส (สถานะ / wait / page fault ณ tick ปัจจุบัน) · Event log |
+| มุมมองของฉัน | ติ๊กเลือกส่วนใดก็ได้มาวางรวมกัน เช่น Gantt คู่กับ Page trace (จำค่าที่เลือกไว้ในเบราว์เซอร์) |
+
+4. **กรองโปรเซส** — ชิป P1, P2, … บนแถบ Timeline กดเพื่อซ่อน/แสดงโปรเซส มีผลกับทุกแท็บ
+5. **โหมดพรีเซนต์** — ปุ่ม "พรีเซนต์" มุมขวาบน: ซ่อนแถบตั้งค่า ขยายตัวอักษร และเปิดเต็มจอ (กด Esc เพื่อออก)
+
+### ⌨️ คีย์ลัด
+
+| ปุ่ม | การทำงาน |
+|:---|:---|
+| `Space` | เล่น / หยุด |
+| `←` / `→` | ถอย / เดินหน้า 1 tick (กด `Shift` ค้าง = 10 tick) |
+| `Home` / `End` | ไปต้น / ท้ายการจำลอง |
+| `Esc` | ปิดหน้าต่าง modal |
 
 ---
 
@@ -175,7 +203,7 @@ git push origin main
 | `scheduler` | `string` | `fcfs`, `sjf`, `rr`, `priority` | `rr` |
 | `quantum` | `integer` | `1` ถึง `32` (สำหรับ Round Robin) | `4` |
 | `ram_frames` | `integer` | `2` ถึง `128` เฟรม | `16` |
-| `replacement` | `string` | `fifo`, `lru` | `lru` |
+| `replacement` | `string` | `fifo`, `lru`, `clock` | `lru` |
 | `seed` | `integer` | จำนวนเต็มบวก | `42` |
 
 ---
@@ -270,13 +298,25 @@ os-resource-sim/
 │   └── src/
 │       ├── main.tsx                   # React Entrypoint
 │       ├── App.tsx                    # หน้าจอแดชบอร์ดหลัก
-│       ├── index.css                  # ระบบธีมมืดและ Styling
+│       ├── index.css                  # Design tokens (โทน Sage Forest) และ Styling พื้นฐาน
 │       ├── vite-env.d.ts              # Type definitions ของ Vite Environment
 │       ├── api/client.ts              # ตัวเรียก API (simulate, compare, workloads)
 │       ├── store/useSimStore.ts       # State Management (Zustand)
 │       ├── hooks/usePlayback.ts       # ควบคุมเวลาและ Animation Loop
+│       ├── hooks/useHotkeys.ts        # คีย์ลัด Space / ลูกศร / Home / End
+│       ├── hooks/useDismiss.ts        # ปิด modal ด้วย Esc หรือคลิกพื้นหลัง
+│       ├── lib/timeline.ts            # รวม snapshot เป็นช่วงการรันของ CPU
 │       ├── lib/colors.ts              # ฟังก์ชันสร้างโทนสีตาม PID และ Status
 │       └── components/                # คอมโพเนนต์แสดงผล
+│           ├── layout/Shell.tsx       # โครงหน้า แท็บ และโหมดพรีเซนต์
+│           ├── layout/Header.tsx      # แถบหัวและเมนู
+│           ├── layout/CustomView.tsx  # แท็บ "มุมมองของฉัน"
+│           ├── ProcessFilter.tsx      # ชิปกรองโปรเซส
+│           ├── PageFaultTrace.tsx     # Page Replacement Trace แบบตำรา
+│           ├── ExecutiveSummary.tsx   # ผลวินิจฉัยและไทล์ตัวเลข
+│           ├── EventLog.tsx           # บันทึกเหตุการณ์ตามเวลา
+│           ├── ui/Sparkline.tsx       # เส้นแนวโน้มขนาดเล็ก
+│           ├── ui/RingGauge.tsx       # มาตรวัดแบบวงแหวน
 │           ├── GanttChart.tsx         # ไทม์ไลน์ Gantt Chart ของกระบวนการ
 │           ├── GaugeRow.tsx           # มาตรวัด CPU / RAM / I/O Utilizations
 │           ├── QueueLane.tsx          # แอนิเมชันสถานะคิว Ready, Running, IO
@@ -284,7 +324,7 @@ os-resource-sim/
 │           ├── UtilizationChart.tsx   # กราฟเส้นแบบ Real-time แสดงความหนาแน่น
 │           ├── ProcessTable.tsx       # ตารางสถิติและสถานะแต่ละ Process
 │           ├── BottleneckCard.tsx     # การ์ดสรุปคอขวดและคำแนะนำ
-│           ├── PlaybackBar.tsx        # แถบควบคุมเวลา Play/Pause/Scrubbing
+│           ├── PlaybackBar.tsx        # แถบ Timeline: Play/Pause และเลื่อนเวลาบน Gantt ย่อส่วน
 │           ├── ControlPanel.tsx       # แผงปรับแต่งตัวแปรการทดลอง
 │           ├── WhatIfCompare.tsx      # โหมดเปรียบเทียบ A/B Testing
 │           ├── CustomWorkloadModal.tsx# หน้าต่างออกแบบ Workload ด้วยตนเอง

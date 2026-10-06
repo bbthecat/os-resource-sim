@@ -1,27 +1,166 @@
 import { useState, useMemo } from 'react';
 import { useSimStore } from '../store/useSimStore';
-import { 
-  Lightbulb, CheckCircle2, AlertOctagon, TrendingUp, 
-  Cpu, HardDrive, Layers, ChevronDown, ChevronUp, 
-  FastForward, ShieldCheck, Activity, HelpCircle, Radio, BarChart3
-} from 'lucide-react';
+import { Check, AlertTriangle, AlertOctagon, ChevronDown, FastForward, Radio, BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Sparkline from './ui/Sparkline';
+import { CHART } from '../lib/colors';
+import type { Snapshot } from '../types/sim';
 
+// Rolling window (ticks) for the CPU / Disk / thrashing trend lines
+const TREND_WINDOW = 10;
+// Sparklines never draw more than this many points, so 50 ticks/s playback stays cheap
+const MAX_POINTS = 120;
+
+type Tone = 'normal' | 'warning' | 'danger';
+
+const VALUE_TONE: Record<Tone, string> = {
+  normal: 'text-ink',
+  warning: 'text-warning',
+  danger: 'text-danger',
+};
+
+type Verdict = 'healthy' | 'bottleneck' | 'critical';
+
+const VERDICT_STYLE: Record<Verdict, { band: string; disc: string; eyebrow: string; rule: string; label: string }> = {
+  healthy: {
+    band: 'bg-primary-soft border-primary/25',
+    disc: 'bg-primary',
+    eyebrow: 'text-primary-ink',
+    rule: 'border-primary/25',
+    label: 'ไม่พบคอขวด',
+  },
+  bottleneck: {
+    band: 'bg-warning-soft border-warning-line',
+    disc: 'bg-warning',
+    eyebrow: 'text-warning',
+    rule: 'border-warning-line',
+    label: 'พบคอขวด',
+  },
+  critical: {
+    band: 'bg-danger-soft border-danger-line',
+    disc: 'bg-danger',
+    eyebrow: 'text-danger',
+    rule: 'border-danger-line',
+    label: 'พบคอขวดรุนแรง',
+  },
+};
+
+// Per-tick trend values for the whole run (computed once per result)
+interface TrendSeries {
+  cpu: number[];
+  disk: number[];
+  fault: number[];
+  thrash: number[];
+  ready: number[];
+  finished: number[];
+  readyMax: number;
+  finishedMax: number;
+}
+
+// Processes finishing at each tick: per-process finish_time when available (same source as the
+// live tile value), otherwise unique `finish:` events
+function finishesPerTick(snaps: Snapshot[], perProcess: any[] | undefined): number[] {
+  const n = snaps.length;
+  const finishAt = new Array<number>(n).fill(0);
+  if (Array.isArray(perProcess)) {
+    perProcess.forEach((p: any) => {
+      if (p?.finish_time === null || p?.finish_time === undefined) return;
+      const idx = Math.max(0, Math.ceil(p.finish_time));
+      if (idx < n) finishAt[idx]++;
+    });
+    return finishAt;
+  }
+  const seen = new Set<string>();
+  snaps.forEach((s, i) => {
+    s.events?.forEach(e => {
+      if (e.startsWith('finish:') && !seen.has(e)) {
+        seen.add(e);
+        finishAt[i]++;
+      }
+    });
+  });
+  return finishAt;
+}
+
+function buildTrends(snaps: Snapshot[], perProcess: any[] | undefined): TrendSeries {
+  const n = snaps.length;
+  const cpuCum = new Array<number>(n);
+  const diskCum = new Array<number>(n);
+  const thrashCum = new Array<number>(n);
+  const cpu = new Array<number>(n);
+  const disk = new Array<number>(n);
+  const thrash = new Array<number>(n);
+  const fault = new Array<number>(n);
+  const ready = new Array<number>(n);
+  const finished = new Array<number>(n);
+  const finishAt = finishesPerTick(snaps, perProcess);
+  const rolling = (cum: number[], i: number) =>
+    ((cum[i] - (i >= TREND_WINDOW ? cum[i - TREND_WINDOW] : 0)) / Math.min(TREND_WINDOW, i + 1)) * 100;
+
+  let c = 0;
+  let d = 0;
+  let th = 0;
+  let faults = 0;
+  let accesses = 0;
+  let done = 0;
+  let readyMax = 0;
+
+  for (let i = 0; i < n; i++) {
+    const s = snaps[i];
+    c += s.cpu_busy ? 1 : 0;
+    d += s.disk_busy ? 1 : 0;
+    th += s.thrashing ? 1 : 0;
+    cpuCum[i] = c;
+    diskCum[i] = d;
+    thrashCum[i] = th;
+
+    s.events?.forEach(e => {
+      if (e.startsWith('page_fault')) faults++;
+      else if (e.startsWith('mem_access:')) accesses++;
+    });
+    done += finishAt[i];
+
+    cpu[i] = rolling(cpuCum, i);
+    disk[i] = rolling(diskCum, i);
+    thrash[i] = rolling(thrashCum, i);
+    // same formula as the live metric: cumulative faults / cumulative memory accesses
+    fault[i] = accesses > 0 ? (faults / accesses) * 100 : 0;
+    ready[i] = s.ready ? s.ready.length : 0;
+    finished[i] = done;
+    if (ready[i] > readyMax) readyMax = ready[i];
+  }
+
+  return { cpu, disk, fault, thrash, ready, finished, readyMax, finishedMax: done };
+}
+
+// Shrink the first `count` values to at most MAX_POINTS by bucket (mean for rates, last value for running totals)
+function downsample(values: number[], count: number, mode: 'mean' | 'last'): number[] {
+  if (count <= MAX_POINTS) return values.slice(0, count);
+  const out = new Array<number>(MAX_POINTS);
+  for (let k = 0; k < MAX_POINTS; k++) {
+    const start = Math.floor((k * count) / MAX_POINTS);
+    const end = Math.floor(((k + 1) * count) / MAX_POINTS);
+    if (mode === 'last') {
+      out[k] = values[end - 1];
+    } else {
+      let sum = 0;
+      for (let i = start; i < end; i++) sum += values[i];
+      out[k] = sum / (end - start);
+    }
+  }
+  return out;
+}
+
+// The verdict for the overview tab: a status-tinted band, then live stat tiles with trend lines
 export default function ExecutiveSummary() {
   const { result, currentTick, setTick } = useSimStore();
   const [showLogic, setShowLogic] = useState(false);
   const [viewMode, setViewMode] = useState<'live' | 'overall'>('live');
 
-  if (!result || !result.diagnosis) return null;
-
-  const { diagnosis, metrics } = result;
-  const isHealthy = diagnosis.label === 'BALANCED' || diagnosis.label === 'UNDERUTILIZED';
-  const maxTick = result.snapshots ? Math.max(0, result.snapshots.length - 1) : 0;
-  const isAtEnd = currentTick >= maxTick;
-
   // Real-time live cumulative metrics up to currentTick
+  // (computed before the early return so the hook order stays stable between renders)
   const liveMetrics = useMemo(() => {
-    if (!result.snapshots || result.snapshots.length === 0) return null;
+    if (!result?.snapshots || result.snapshots.length === 0) return null;
     const count = Math.min(currentTick + 1, result.snapshots.length);
     const snaps = result.snapshots.slice(0, count);
     const n = snaps.length || 1;
@@ -30,17 +169,18 @@ export default function ExecutiveSummary() {
     const diskBusy = snaps.filter(s => s.disk_busy).length;
     const thrashingCount = snaps.filter(s => s.thrashing).length;
 
+    // same definition as the backend metric: faults / memory accesses
     let pageFaultCount = 0;
+    let memAccessCount = 0;
     snaps.forEach(s => {
-      if (s.events) {
-        s.events.forEach(e => {
-          if (e.startsWith('page_fault') || e === 'PAGE_FAULT') pageFaultCount++;
-        });
-      }
+      s.events?.forEach(e => {
+        if (e.startsWith('page_fault')) pageFaultCount++;
+        else if (e.startsWith('mem_access:')) memAccessCount++;
+      });
     });
 
     const lastSnap = snaps[snaps.length - 1];
-    const readyQueueLen = lastSnap && lastSnap.ready ? lastSnap.ready.length : 0;
+    const readyQueueLen = lastSnap?.ready ? lastSnap.ready.length : 0;
 
     let finishedProcs = 0;
     if (result.metrics && (result.metrics as any).per_process) {
@@ -60,29 +200,61 @@ export default function ExecutiveSummary() {
     return {
       cpuUtil: (cpuBusy / n) * 100,
       diskUtil: (diskBusy / n) * 100,
-      pageFaultRate: n > 0 ? (pageFaultCount / n) * 100 : 0,
+      pageFaultRate: memAccessCount > 0 ? (pageFaultCount / memAccessCount) * 100 : 0,
       thrashingFraction: (thrashingCount / n) * 100,
       readyQueue: readyQueueLen,
       finishedProcs,
     };
   }, [result, currentTick]);
 
+  // Full-run trend series, built once per result
+  const trends = useMemo(() => {
+    if (!result?.snapshots || result.snapshots.length === 0) return null;
+    return buildTrends(result.snapshots, (result.metrics as any)?.per_process);
+  }, [result]);
+
+  // Trend lines from t=0 up to the current tick (the whole run in overall mode or at the end)
+  const total = result?.snapshots?.length ?? 0;
+  const showFullRun = viewMode === 'overall' || currentTick >= total - 1;
+  const sparkCount = showFullRun ? total : Math.min(currentTick + 1, total);
+  const sparks = useMemo(() => {
+    if (!trends || sparkCount === 0) return null;
+    return {
+      cpu: downsample(trends.cpu, sparkCount, 'mean'),
+      disk: downsample(trends.disk, sparkCount, 'mean'),
+      fault: downsample(trends.fault, sparkCount, 'last'),
+      thrash: downsample(trends.thrash, sparkCount, 'mean'),
+      ready: downsample(trends.ready, sparkCount, 'mean'),
+      finished: downsample(trends.finished, sparkCount, 'last'),
+    };
+  }, [trends, sparkCount]);
+
+  if (!result?.diagnosis) return null;
+
+  const { diagnosis, metrics } = result;
+  const isHealthy = diagnosis.label === 'BALANCED' || diagnosis.label === 'UNDERUTILIZED';
+  const isCritical = diagnosis.label === 'THRASHING';
+  const maxTick = result.snapshots ? Math.max(0, result.snapshots.length - 1) : 0;
+  const isAtEnd = currentTick >= maxTick;
+
   // Display metrics depending on viewMode (Live vs Overall)
   const isLive = viewMode === 'live' && !isAtEnd;
-  const activeMetrics = isLive && liveMetrics ? {
-    cpu: liveMetrics.cpuUtil.toFixed(1) + '%',
-    disk: liveMetrics.diskUtil.toFixed(1) + '%',
-    fault: liveMetrics.pageFaultRate.toFixed(1) + '%',
-    thrash: liveMetrics.thrashingFraction.toFixed(1) + '%',
-    ready: liveMetrics.readyQueue.toFixed(0) + ' ตัว',
-    finished: liveMetrics.finishedProcs + ' ตัว',
+  const values = isLive && liveMetrics ? {
+    cpu: liveMetrics.cpuUtil,
+    disk: liveMetrics.diskUtil,
+    fault: liveMetrics.pageFaultRate,
+    thrash: liveMetrics.thrashingFraction,
+    ready: liveMetrics.readyQueue,
+    readyDigits: 0,
+    finished: liveMetrics.finishedProcs,
   } : {
-    cpu: (metrics.cpu_util * 100).toFixed(1) + '%',
-    disk: (metrics.disk_util * 100).toFixed(1) + '%',
-    fault: (metrics.page_fault_rate * 100).toFixed(1) + '%',
-    thrash: (metrics.thrashing_fraction * 100).toFixed(1) + '%',
-    ready: metrics.avg_ready_queue.toFixed(1) + ' ตัว',
-    finished: metrics.finished_processes + ' ตัว',
+    cpu: metrics.cpu_util * 100,
+    disk: metrics.disk_util * 100,
+    fault: metrics.page_fault_rate * 100,
+    thrash: metrics.thrashing_fraction * 100,
+    ready: metrics.avg_ready_queue,
+    readyDigits: 1,
+    finished: metrics.finished_processes,
   };
 
   // Rule explanations based on analyzer.py logic
@@ -104,267 +276,163 @@ export default function ExecutiveSummary() {
     }
   };
 
+  // Value colour follows the analyzer thresholds quoted in the rule explanations above
+  const tone = (warnAt: number, v: number): Tone => (v >= warnAt ? 'warning' : 'normal');
+  const thrashTone: Tone = values.thrash >= 25 ? 'danger' : 'normal';
+
+  const stats: { label: string; value: string; unit: string; tone: Tone; series?: number[]; color: string; min: number; max: number }[] = [
+    { label: 'CPU ใช้งาน', value: values.cpu.toFixed(1), unit: '%', tone: tone(85, values.cpu), series: sparks?.cpu, color: CHART.cpu, min: 0, max: 100 },
+    { label: 'Disk ใช้งาน', value: values.disk.toFixed(1), unit: '%', tone: tone(80, values.disk), series: sparks?.disk, color: CHART.disk, min: 0, max: 100 },
+    { label: 'อัตรา page fault', value: values.fault.toFixed(1), unit: '%', tone: tone(10, values.fault), series: sparks?.fault, color: CHART.ram, min: 0, max: 100 },
+    { label: 'Thrashing', value: values.thrash.toFixed(1), unit: '%', tone: thrashTone, series: sparks?.thrash, color: CHART.fault, min: 0, max: 100 },
+    { label: 'คิว Ready', value: values.ready.toFixed(values.readyDigits), unit: 'ตัว', tone: 'normal', series: sparks?.ready, color: CHART.ready, min: 0, max: Math.max(1, trends?.readyMax ?? 1) },
+    { label: 'ทำงานเสร็จ', value: String(values.finished), unit: 'ตัว', tone: 'normal', series: sparks?.finished, color: CHART.cpu, min: 0, max: Math.max(1, trends?.finishedMax ?? 1) },
+  ];
+
+  const modes = [
+    { id: 'live' as const, label: 'Real-time', Icon: Radio },
+    { id: 'overall' as const, label: 'ภาพรวมทั้งหมด', Icon: BarChart3 },
+  ];
+
+  let verdict: Verdict = 'bottleneck';
+  if (isHealthy) verdict = 'healthy';
+  else if (isCritical) verdict = 'critical';
+  const vs = VERDICT_STYLE[verdict];
+  let StatusIcon = AlertTriangle;
+  if (verdict === 'healthy') StatusIcon = Check;
+  else if (verdict === 'critical') StatusIcon = AlertOctagon;
+
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`glass-panel border-l-4 rounded-2xl p-5 sm:p-6 shadow-card relative overflow-hidden transition-all duration-300 ${
-        isHealthy ? 'border-l-emerald-400' : 'border-l-amber-400'
-      }`}
-    >
-      <div className={`absolute inset-0 opacity-40 bg-gradient-to-r pointer-events-none ${
-        isHealthy ? 'from-pastel-green/30 to-transparent' : 'from-pastel-yellow/30 to-transparent'
-      }`}></div>
-      
-      <div className="relative z-10 space-y-4">
-        {/* Top Header Row */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl shadow-glow ${
-              isHealthy ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-100'
-            }`}>
-              {isHealthy ? <CheckCircle2 size={24} /> : <AlertOctagon size={24} />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg font-bold text-slate-800">
-                  {isLive ? 'สถานะ Real-time Telemetry (ขณะกำลังจำลอง)' : 'สรุปผลการประเมินภาพรวมหลังรันเสร็จ (Post-Run Summary)'}
-                </h2>
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
-                  isHealthy ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
-                }`}>
-                  {isHealthy ? 'ระบบสมดุล (STABLE)' : 'พบคอขวด (BOTTLENECK)'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-                <ShieldCheck size={14} className="text-blue-500" />
-                {isLive 
-                  ? `คำนวณสดสะสมตามเวลาจริงถึง Tick ${currentTick} (100% Deterministic • ไม่ใช้ AI)` 
-                  : `ประเมินจากสถิติจริงตลอดการจำลอง ${maxTick} Ticks • คำนวณด้วย Rule-based Heuristics (ไม่ใช่ AI)`}
-              </p>
-            </div>
-          </div>
+    <section aria-labelledby="executive-summary-title" className="space-y-3">
+      {/* Verdict band */}
+      <div className={`rounded-2xl border px-4 py-4 sm:px-5 ${vs.band}`}>
+        <div className="flex items-start gap-3.5 sm:gap-4">
+          <span
+            aria-hidden="true"
+            className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-white ${vs.disc}`}
+          >
+            <StatusIcon size={22} strokeWidth={2.25} />
+          </span>
 
-          {/* Mode Switcher & Tick Info */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner text-xs">
-              <button
-                onClick={() => setViewMode('live')}
-                className={`px-2.5 py-1 rounded-lg font-medium flex items-center gap-1.5 transition-all ${
-                  viewMode === 'live' 
-                    ? 'bg-white text-blue-600 shadow-sm font-bold' 
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Radio size={12} className={viewMode === 'live' ? 'text-red-500 animate-pulse' : 'text-slate-400'} />
-                <span>Real-time (ตาม Tick)</span>
-              </button>
-              <button
-                onClick={() => setViewMode('overall')}
-                className={`px-2.5 py-1 rounded-lg font-medium flex items-center gap-1.5 transition-all ${
-                  viewMode === 'overall' 
-                    ? 'bg-white text-blue-600 shadow-sm font-bold' 
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <BarChart3 size={12} className={viewMode === 'overall' ? 'text-indigo-600' : 'text-slate-400'} />
-                <span>สรุปภาพรวมทั้งหมด</span>
-              </button>
-            </div>
-
-            {!isAtEnd && (
-              <button
-                onClick={() => setTick(maxTick)}
-                className="bg-white hover:bg-slate-50 text-blue-600 border border-blue-200 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition hover:scale-105 active:scale-95"
-                title="ข้ามไปดูจุดสิ้นสุดของการจำลอง"
-              >
-                <FastForward size={13} />
-                <span>ดูผลลัพธ์ท้ายสุด</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Dynamic Evaluated Metrics Pills (Now actively animating and computing per tick) */}
-        <div>
-          <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1.5 font-medium px-1">
-            <span className="flex items-center gap-1.5">
-              {isLive ? (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping inline-block" />
-                  <strong className="text-slate-700">สถิติสดสะสม ณ Tick {currentTick} / {maxTick}:</strong> (ตัวเลขจะอัปเดตแบบ Real-time เมื่อเล่น Timeline)
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={13} className="text-emerald-500" />
-                  <strong className="text-slate-700">สถิติภาพรวมตลอดการจำลอง ({maxTick} Ticks ทั้งหมด):</strong>
-                </>
-              )}
-            </span>
-            <span className="font-mono text-slate-400 text-[10px]">
-              Tick {currentTick} of {maxTick}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-            <motion.div 
-              key={`cpu-${activeMetrics.cpu}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><Cpu size={12} className="text-blue-500" /> CPU ใช้งาน</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.cpu}
-              </div>
-            </motion.div>
-
-            <motion.div 
-              key={`disk-${activeMetrics.disk}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><HardDrive size={12} className="text-purple-500" /> Disk I/O</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.disk}
-              </div>
-            </motion.div>
-
-            <motion.div 
-              key={`fault-${activeMetrics.fault}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><Layers size={12} className="text-amber-500" /> Page Fault</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.fault}
-              </div>
-            </motion.div>
-
-            <motion.div 
-              key={`thrash-${activeMetrics.thrash}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><AlertOctagon size={12} className="text-rose-500" /> Thrashing</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.thrash}
-              </div>
-            </motion.div>
-
-            <motion.div 
-              key={`ready-${activeMetrics.ready}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><Activity size={12} className="text-indigo-500" /> Ready คิว</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.ready}
-              </div>
-            </motion.div>
-
-            <motion.div 
-              key={`finished-${activeMetrics.finished}`}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              className="bg-white/80 p-2.5 rounded-xl border border-slate-100 shadow-sm"
-            >
-              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium mb-1">
-                <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-emerald-500" /> ทำงานเสร็จ</span>
-              </div>
-              <div className="text-sm font-bold font-mono text-slate-800">
-                {activeMetrics.finished}
-              </div>
-            </motion.div>
-          </div>
-        </div>
-
-        {/* Diagnosis & Recommendation Content */}
-        <div className="bg-white/90 rounded-xl p-4 border border-white shadow-sm space-y-3">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 block mb-0.5">
-                {isLive ? 'แนวโน้มการวินิจฉัย (จากการรันภาพรวม):' : 'ผลการวินิจฉัยหลัก:'}
-              </span>
-              {isLive && (
-                <span className="text-[11px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium">
-                  กำลังเล่น Timeline • ผลสรุปเต็มจะเสร็จสมบูรณ์เมื่อถึง Tick {maxTick}
-                </span>
-              )}
-            </div>
-            <p className="text-base font-bold text-slate-800">
-              {diagnosis.title}
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-baseline gap-x-2 text-xs">
+              <span className={`font-semibold ${vs.eyebrow}`}>{vs.label}</span>
+              <span className="text-ink/60">ผลวินิจฉัยจากการรันทั้งหมด</span>
             </p>
-          </div>
-
-          <div className="flex items-start gap-2.5 text-sm text-slate-700 bg-slate-50/70 p-3 rounded-lg border border-slate-100">
-            <Lightbulb className="text-amber-500 shrink-0 mt-0.5" size={17} />
-            <div className="leading-relaxed">
-              <span className="font-bold text-slate-800">การวิเคราะห์: </span>
+            <h2
+              id="executive-summary-title"
+              className="mt-0.5 text-xl sm:text-2xl font-semibold leading-snug text-ink"
+            >
+              {diagnosis.title}
+            </h2>
+            <p className="mt-1 text-sm sm:text-[15px] text-ink/75 leading-relaxed max-w-3xl">
               {diagnosis.recommendation}
-            </div>
-          </div>
-          
-          {!isHealthy && diagnosis.suggested_config && Object.keys(diagnosis.suggested_config).length > 0 && (
-            <div className="flex items-start gap-2.5 text-sm text-slate-700 bg-blue-50/60 p-3 rounded-lg border border-blue-100">
-              <TrendingUp className="text-blue-600 shrink-0 mt-0.5" size={17} />
-              <div className="leading-relaxed">
-                <span className="font-bold text-slate-800">แนวทางปรับปรุง (What-If): </span> 
-                ลองปรับค่าคอนฟิก <span className="font-mono bg-white px-2 py-0.5 rounded text-xs text-blue-700 font-bold border border-blue-200">{Object.keys(diagnosis.suggested_config).join(', ')}</span> ในแถบด้านซ้าย แล้วกดรันใหม่ เพื่อเปรียบเทียบผลลัพธ์
-              </div>
-            </div>
-          )}
+            </p>
 
-          {/* Toggleable Rule Engine Logic (Proof of Dynamic Evaluation without AI) */}
-          <div className="pt-1">
             <button
               onClick={() => setShowLogic(!showLogic)}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
+              aria-expanded={showLogic}
+              aria-controls="executive-summary-logic"
+              className="mt-2.5 -ml-1 inline-flex items-center gap-1 px-1 rounded-md text-sm font-medium text-ink/70 hover:text-ink transition-colors"
             >
-              <HelpCircle size={14} className="text-slate-400" />
-              <span>ทำไมระบบถึงสรุปแบบนี้? ดูเกณฑ์ชี้วัดทางสถิติ (Rule Evaluation)</span>
-              {showLogic ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              ทำไมระบบถึงสรุปแบบนี้
+              <ChevronDown size={15} className={`transition-transform ${showLogic ? 'rotate-180' : ''}`} />
             </button>
 
-            <AnimatePresence>
+            <AnimatePresence initial={false}>
               {showLogic && (
                 <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden mt-2 pt-2 border-t border-slate-100"
+                  id="executive-summary-logic"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className={`mt-3 pt-3 border-t space-y-1.5 max-w-3xl ${vs.rule}`}
                 >
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs text-slate-600 space-y-1.5 font-mono">
-                    <p className="font-sans font-bold text-slate-700">🔍 ที่มาของบทสรุป (อิงตามสมมติฐานและเงื่อนไขทฤษฎี OS ใน sim/analyzer.py):</p>
-                    <p className="font-sans text-slate-700 leading-relaxed bg-white p-2 rounded border border-slate-200">
-                      {getRuleExplanation()}
-                    </p>
-                    <div className="text-[11px] text-slate-500 pt-1 font-sans">
-                      * ไม่มีการใช้ AI หรือการสุ่มข้อความ ทุกข้อสรุปคำนวณสดจากสถิติจริงของรอบการจำลองนี้แบบ 100% Deterministic
-                    </div>
-                  </div>
+                  <p className="text-sm text-ink leading-relaxed">{getRuleExplanation()}</p>
+                  <p className="text-xs text-ink/65 leading-relaxed">
+                    เกณฑ์มาจากเงื่อนไขตามทฤษฎี OS ใน <span className="font-mono">sim/analyzer.py</span>{' '}
+                    ทุกข้อสรุปคำนวณจากสถิติจริงของการจำลองรอบนี้ ไม่ได้ใช้ AI หรือสุ่มข้อความ
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         </div>
       </div>
-    </motion.div>
+
+      {/* Tile controls: what the numbers below cover */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-1">
+        <p className="text-xs text-muted">
+          {isLive ? (
+            <>
+              ตัวเลขสะสมถึง tick <span className="font-mono tabular-nums text-ink">{currentTick}</span> จาก{' '}
+              <span className="font-mono tabular-nums">{maxTick}</span> และอัปเดตตามไทม์ไลน์
+            </>
+          ) : (
+            <>
+              ค่าตลอดการจำลอง <span className="font-mono tabular-nums">{maxTick}</span> tick
+            </>
+          )}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <fieldset className="inline-flex bg-surface-muted p-1 rounded-lg">
+            <legend className="sr-only">มุมมองตัวเลข</legend>
+            {modes.map(({ id, label, Icon }) => {
+              const selected = viewMode === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setViewMode(id)}
+                  aria-pressed={selected}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium transition-colors ${
+                    selected ? 'bg-surface text-ink shadow-card' : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  <Icon size={14} className={selected ? 'text-primary' : undefined} />
+                  {label}
+                </button>
+              );
+            })}
+          </fieldset>
+
+          {!isAtEnd && (
+            <button
+              onClick={() => setTick(maxTick)}
+              title="ข้ามไปดูจุดสิ้นสุดของการจำลอง"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surface border border-line text-sm font-medium text-ink hover:bg-surface-muted hover:border-line-strong transition-colors"
+            >
+              <FastForward size={14} className="text-muted" />
+              ดูผลท้ายสุด
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Stat tiles */}
+      <dl className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 sm:gap-3">
+        {stats.map(({ label, value, unit, tone: t, series, color, min, max }) => (
+          <div key={label} className="min-w-0 bg-surface border border-line rounded-xl overflow-hidden">
+            <div className="px-3.5 pt-3">
+              <dt className="text-xs text-muted truncate">{label}</dt>
+              <dd className={`mt-0.5 text-xl sm:text-2xl font-semibold tabular-nums leading-tight ${VALUE_TONE[t]}`}>
+                {value}
+                {unit === '%' ? (
+                  unit
+                ) : (
+                  <span className="ml-1 text-sm font-normal text-muted">{unit}</span>
+                )}
+              </dd>
+            </div>
+            <div className="mt-1.5 h-[30px]">
+              {series && series.length > 1 && (
+                <Sparkline values={series} color={color} height={30} min={min} max={max} className="block" />
+              )}
+            </div>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
-
-

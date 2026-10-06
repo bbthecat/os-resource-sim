@@ -7,11 +7,15 @@ interface SimStore {
   currentTick: number;
   isPlaying: boolean;
   speed: number;
+  // processes hidden by the process filter (empty = show everyone)
+  hiddenPids: number[];
   setConfig: (config: SimConfig) => void;
   setResult: (result: SimResult) => void;
   setTick: (tick: number) => void;
   togglePlay: () => void;
   setSpeed: (speed: number) => void;
+  togglePid: (pid: number) => void;
+  showAllPids: () => void;
 }
 
 export const useSimStore = create<SimStore>((set) => ({
@@ -31,8 +35,21 @@ export const useSimStore = create<SimStore>((set) => ({
   isPlaying: false,
   speed: 10, // ticks per second
   setConfig: (config) => set({ config }),
-  setResult: (result) => set({ result, currentTick: 0, isPlaying: false }),
+  setResult: (result) => set({ result, currentTick: 0, isPlaying: false, hiddenPids: [] }),
   setTick: (currentTick) => set({ currentTick }),
   togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
   setSpeed: (speed) => set({ speed }),
+  hiddenPids: [],
+  togglePid: (pid) =>
+    set((state) => ({
+      hiddenPids: state.hiddenPids.includes(pid)
+        ? state.hiddenPids.filter((p) => p !== pid)
+        : [...state.hiddenPids, pid],
+    })),
+  showAllPids: () => set({ hiddenPids: [] }),
 }));
+
+// Shown by the process filter? Idle (null) is always shown.
+export function isPidShown(hiddenPids: number[], pid: number | null | undefined): boolean {
+  return pid === null || pid === undefined || !hiddenPids.includes(pid);
+}

@@ -1,8 +1,13 @@
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useDismiss, backdropDismiss } from '../hooks/useDismiss';
 import { useSimStore } from '../store/useSimStore';
 import { runSimulation } from '../api/client';
 import { SimConfig } from '../types/sim';
 import { X, Play, RefreshCw, AlertTriangle, Cpu, HardDrive, Layers, CheckCircle2 } from 'lucide-react';
+
+// Category tags are neutral: the cards don't get per-scenario color themes
+const TAG_NEUTRAL = 'bg-surface-muted text-muted';
 
 interface ScenarioPreset {
   id: string;
@@ -21,7 +26,7 @@ const PRESETS: ScenarioPreset[] = [
     id: 'thrashing',
     title: '1. หายนะ Thrashing (Thrashing Disaster)',
     badge: 'Virtual Memory / Paging',
-    badgeColor: 'bg-red-500/10 text-red-400 border-red-500/30',
+    badgeColor: TAG_NEUTRAL,
     icon: AlertTriangle,
     description: 'จำลองกรณี RAM ไม่พอสำหรับ Working Set ของโปรเซส ทำให้เกิด Page Fault ถล่มทลาย',
     observation: 'CPU Utilization ดิ่งลงต่ำ ทั้งๆ ที่ระบบอืด เพราะ Disk ติดคอขวด 100% จากการสลับหน้า (Swap)',
@@ -39,7 +44,7 @@ const PRESETS: ScenarioPreset[] = [
     id: 'convoy',
     title: '2. ปรากฏการณ์ Convoy Effect (รถช้าขวางทาง)',
     badge: 'CPU Scheduling / FCFS',
-    badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    badgeColor: TAG_NEUTRAL,
     icon: Cpu,
     description: 'จำลองการใช้ FCFS เมื่อมีโปรเซสคำนวณยาวนาน (CPU-bound) วิ่งเข้ามาก่อนโปรเซสสั้นๆ',
     observation: 'Ready Queue ยาวสะสม โปรเซสสั้นๆ ต้องรอคอยอย่างไม่สมเหตุสมผล ทำให้ Average Waiting Time พุ่งสูง',
@@ -57,7 +62,7 @@ const PRESETS: ScenarioPreset[] = [
     id: 'sjf_optimal',
     title: '3. SJF แก้ปัญหาคิวยาว (Shortest Job First)',
     badge: 'CPU Scheduling / Optimal Waiting',
-    badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    badgeColor: TAG_NEUTRAL,
     icon: CheckCircle2,
     description: 'เปรียบเทียบกับ FCFS โดยนำโปรเซสงานสั้นขึ้นมาประมวลผลก่อน',
     observation: 'Average Waiting Time และ Turnaround Time ลดลงอย่างเห็นได้ชัดเมื่อเทียบกับ FCFS',
@@ -75,7 +80,7 @@ const PRESETS: ScenarioPreset[] = [
     id: 'belady',
     title: "4. ปริศนา Belady's Anomaly (เพิ่ม RAM แต่ Fault เพิ่ม)",
     badge: 'Paging Anomaly / FIFO',
-    badgeColor: 'bg-pink-500/10 text-pink-400 border-pink-500/30',
+    badgeColor: TAG_NEUTRAL,
     icon: Layers,
     description: 'ทดสอบทฤษฎี Belady ใน FIFO เมื่อเพิ่ม Frame ของ RAM กลับทำให้เกิด Page Fault มากขึ้น',
     observation: 'ตรวจดูอัตรา Page Fault และเปรียบเทียบระหว่าง FIFO กับ Stack Algorithm เช่น LRU',
@@ -93,7 +98,7 @@ const PRESETS: ScenarioPreset[] = [
     id: 'clock_efficient',
     title: '5. Clock / Second Chance Algorithm (ประสิทธิภาพสูง)',
     badge: 'Memory / Approximate LRU',
-    badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+    badgeColor: TAG_NEUTRAL,
     icon: HardDrive,
     description: 'จำลองอัลกอริทึมเข็มนาฬิกาที่ OS จริงส่วนใหญ่ (เช่น Linux) นิยมใช้เลียนแบบ LRU ด้วยต้นทุนต่ำ',
     observation: 'การทำงานของ Reference bit (0 และ 1) ที่ให้โอกาสที่สองแก่หน้าเพจที่เพิ่งถูกเรียกใช้',
@@ -115,11 +120,10 @@ interface ScenarioPresetsModalProps {
   onSelectPreset?: (preset: ScenarioPreset) => void;
 }
 
-export default function ScenarioPresetsModal({ isOpen, onClose, onSelectPreset }: ScenarioPresetsModalProps) {
+export default function ScenarioPresetsModal({ isOpen, onClose, onSelectPreset }: Readonly<ScenarioPresetsModalProps>) {
+  useDismiss(isOpen, onClose);
   const { config, setConfig, setResult } = useSimStore();
   const [loadingId, setLoadingId] = useState<string | null>(null);
-
-  if (!isOpen) return null;
 
   const handleApplyPreset = async (preset: ScenarioPreset) => {
     setLoadingId(preset.id);
@@ -143,99 +147,122 @@ export default function ScenarioPresetsModal({ isOpen, onClose, onSelectPreset }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white/95 border border-white/80 rounded-2xl w-full max-w-3xl max-h-[85vh] shadow-2xl overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-gradient-to-r from-pastel-blue/20 via-white to-pastel-purple/20">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-blue-100 border border-blue-200 text-blue-600 shadow-sm">
-              <Layers size={20} />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-800">สถานการณ์จำลองมาตรฐาน (Preset Scenarios)</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">เลือกสถานการณ์เพื่อทดลองและสังเกตพฤติกรรมสำคัญของเคอร์เนล</p>
-            </div>
-          </div>
-          <button 
-            onClick={onClose} 
-            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition"
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="presets-overlay"
+          onPointerDown={backdropDismiss(onClose)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/30 backdrop-blur-[2px]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="presets-modal-title"
+            className="bg-surface border border-line rounded-xl shadow-pop w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col"
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
           >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Presets List */}
-        <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(85vh-120px)] bg-slate-50/50">
-          {PRESETS.map((preset) => {
-            const Icon = preset.icon;
-            const isLoading = loadingId === preset.id;
-
-            return (
-              <div
-                key={preset.id}
-                className="bg-white border-2 border-slate-200/80 hover:border-blue-300 rounded-2xl p-4 sm:p-5 transition shadow-sm space-y-3"
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-line">
+              <div>
+                <h2 id="presets-modal-title" className="text-lg font-semibold text-ink">
+                  สถานการณ์จำลองมาตรฐาน
+                </h2>
+                <p className="mt-0.5 text-sm text-muted">
+                  เลือกสถานการณ์เพื่อทดลองและสังเกตพฤติกรรมสำคัญของเคอร์เนล ระบบจะตั้งค่าและรันการจำลองให้ทันที
+                </p>
+              </div>
+              <button
+                onClick={onClose}
+                aria-label="ปิด"
+                className="shrink-0 text-muted hover:text-ink hover:bg-surface-muted rounded-md p-1.5 transition-colors"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 shadow-inner">
-                      <Icon size={18} className="text-blue-600" />
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Presets list */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-3">
+              {PRESETS.map((preset) => {
+                const Icon = preset.icon;
+                const isLoading = loadingId === preset.id;
+
+                return (
+                  <section
+                    key={preset.id}
+                    className="border border-line rounded-lg p-4 hover:border-primary/50 hover:bg-primary-soft/40 transition-colors space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <Icon size={18} className="text-primary shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <h3 className="text-base font-semibold text-ink leading-snug">{preset.title}</h3>
+                          <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${preset.badgeColor}`}>
+                            {preset.badge}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleApplyPreset(preset)}
+                        disabled={isLoading || loadingId !== null}
+                        className="shrink-0 self-start inline-flex items-center justify-center gap-1.5 bg-primary text-white hover:bg-primary-hover rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {isLoading ? (
+                          <>
+                            <RefreshCw size={14} className="animate-spin" />
+                            <span>กำลังจำลอง...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play size={14} fill="currentColor" />
+                            <span>จำลองสถานการณ์นี้</span>
+                          </>
+                        )}
+                      </button>
                     </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                        {preset.title}
-                      </h3>
-                      <span className={`inline-block mt-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${preset.badgeColor}`}>
-                        {preset.badge}
+
+                    <p className="text-sm text-muted leading-relaxed">{preset.description}</p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3 text-sm">
+                      <div>
+                        <p className="font-medium text-warning">สิ่งที่ควรสังเกต</p>
+                        <p className="mt-0.5 text-ink leading-relaxed">{preset.observation}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-primary">บทเรียน</p>
+                        <p className="mt-0.5 text-ink leading-relaxed">{preset.lesson}</p>
+                      </div>
+                    </div>
+
+                    {/* Parameters */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-line text-xs text-muted">
+                      <span className="bg-surface-muted px-2.5 py-0.5 rounded-full">
+                        Workload <span className="font-mono text-ink">{preset.config.workload}</span>
+                      </span>
+                      <span className="bg-surface-muted px-2.5 py-0.5 rounded-full">
+                        Scheduler <span className="font-mono text-ink">{preset.config.scheduler}</span>
+                      </span>
+                      <span className="bg-surface-muted px-2.5 py-0.5 rounded-full">
+                        RAM <span className="text-ink tabular-nums">{preset.config.ram_frames} frames</span>
+                      </span>
+                      <span className="bg-surface-muted px-2.5 py-0.5 rounded-full">
+                        Policy <span className="font-mono text-ink">{preset.config.replacement}</span>
                       </span>
                     </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleApplyPreset(preset)}
-                    disabled={isLoading || loadingId !== null}
-                    className="flex items-center justify-center space-x-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-bold transition shadow-sm hover:scale-105 active:scale-95 disabled:opacity-50"
-                  >
-                    {isLoading ? (
-                      <>
-                        <RefreshCw size={14} className="animate-spin" />
-                        <span>กำลังจำลอง...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play size={14} fill="currentColor" />
-                        <span>จำลองสถานการณ์นี้</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  {preset.description}
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                  <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200/70">
-                    <span className="font-bold text-amber-800 block text-xs mb-1">ข้อสังเกตเชิงระบบ:</span>
-                    <span className="text-slate-700 text-xs leading-relaxed">{preset.observation}</span>
-                  </div>
-                  <div className="bg-blue-50/70 p-3 rounded-xl border border-blue-200/70">
-                    <span className="font-bold text-blue-800 block text-xs mb-1">หลักการระบบปฏิบัติการ:</span>
-                    <span className="text-slate-700 text-xs leading-relaxed">{preset.lesson}</span>
-                  </div>
-                </div>
-
-                {/* Parameters pill */}
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 font-mono pt-1 border-t border-slate-100">
-                  <span className="bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200 font-medium">Workload: <strong>{preset.config.workload}</strong></span>
-                  <span className="bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200 font-medium">Scheduler: <strong>{preset.config.scheduler}</strong></span>
-                  <span className="bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200 font-medium">RAM: <strong>{preset.config.ram_frames} frames</strong></span>
-                  <span className="bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200 font-medium">Policy: <strong>{preset.config.replacement}</strong></span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

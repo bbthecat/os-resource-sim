@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+const token = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
+
 export default {
   content: [
     "./index.html",
@@ -6,53 +8,72 @@ export default {
   ],
   theme: {
     extend: {
+      // Sage Forest palette — values live as CSS variables in src/index.css
       colors: {
-        background: "#fcfaf9", /* soft cream */
-        surface: "#ffffff", /* white */
-        "surface-raised": "#f8fafc", /* slate-50 */
-        "surface-hover": "#f1f5f9", /* slate-100 */
-        "border-subtle": "#e2e8f0", /* slate-200 */
-        "border-light": "#cbd5e1", /* slate-300 */
-        pastel: {
-          pink: "#f8a5c2",
-          yellow: "#fcf1b6",
-          green: "#cde5d2",
-          blue: "#9adcfb",
-          purple: "#e2c2dd",
+        canvas: token('canvas'),
+        surface: {
+          DEFAULT: token('surface'),
+          muted: token('surface-muted'),
         },
+        line: {
+          DEFAULT: token('line'),
+          strong: token('line-strong'),
+        },
+        ink: token('ink'),
+        muted: token('muted'),
+        subtle: token('subtle'),
         primary: {
-          DEFAULT: "#9adcfb", /* pastel blue */
-          hover: "#89cbe9",
-          subtle: "#e0f6ff",
+          DEFAULT: token('primary'),
+          hover: token('primary-hover'),
+          soft: token('primary-soft'),
+          ink: token('primary-ink'),
         },
-        secondary: "#f8a5c2", /* pastel pink */
-        danger: "#ff8a8a",
-        warning: "#fcf1b6",
-        info: "#cde5d2"
+        warning: {
+          DEFAULT: token('warning'),
+          soft: token('warning-soft'),
+          line: token('warning-line'),
+        },
+        danger: {
+          DEFAULT: token('danger'),
+          soft: token('danger-soft'),
+          line: token('danger-line'),
+        },
+        info: {
+          DEFAULT: token('info'),
+          soft: token('info-soft'),
+        },
+        // the dark timeline scrubber — the one dark surface in the app
+        night: {
+          DEFAULT: token('night'),
+          raised: token('night-raised'),
+          line: token('night-line'),
+          text: token('night-text'),
+          muted: token('night-muted'),
+          signal: token('night-signal'),
+        },
       },
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+        sans: ['"IBM Plex Sans"', '"IBM Plex Sans Thai"', 'system-ui', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', 'Consolas', 'monospace'],
       },
       boxShadow: {
-        subtle: "0 4px 15px -3px rgba(0, 0, 0, 0.05), 0 2px 6px -2px rgba(0, 0, 0, 0.02)",
-        card: "0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01)",
-        glow: "0 0 20px rgba(154, 220, 251, 0.4)",
+        card: "0 1px 2px rgb(31 42 31 / 0.04)",
+        pop: "0 12px 32px -8px rgb(31 42 31 / 0.18), 0 2px 6px rgb(31 42 31 / 0.06)",
       },
       animation: {
-        'fade-in': 'fadeIn 0.5s ease-out',
-        'slide-up': 'slideUp 0.5s ease-out',
+        'fade-in': 'fadeIn 0.18s ease-out',
+        'draw-in': 'drawIn 0.9s cubic-bezier(0.22, 1, 0.36, 1)',
       },
       keyframes: {
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
         },
-        slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(10px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        }
-      }
+        drawIn: {
+          '0%': { clipPath: 'inset(0 100% 0 0)' },
+          '100%': { clipPath: 'inset(0 0 0 0)' },
+        },
+      },
     },
   },
   plugins: [],

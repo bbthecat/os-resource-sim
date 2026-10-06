@@ -1,10 +1,33 @@
+import type { ReactNode } from 'react';
 import { useSimStore } from '../store/useSimStore';
-import { Cpu, HardDrive, Database, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import RingGauge from './ui/RingGauge';
+import { CHART } from '../lib/colors';
+
+type Level = 'normal' | 'high' | 'critical';
+
+const VALUE_TONE: Record<Level, string> = {
+  normal: 'text-ink',
+  high: 'text-warning',
+  critical: 'text-danger',
+};
+
+// Ring colours: the resource's own series colour when normal, status tokens past a threshold
+const RING_COLOR: Record<Exclude<Level, 'normal'>, string> = {
+  high: 'rgb(var(--warning))',
+  critical: 'rgb(var(--danger))',
+};
+
+const TRACK_COLOR: Record<Level, string> = {
+  normal: 'rgb(var(--surface-muted))',
+  high: 'rgb(var(--warning-soft))',
+  critical: 'rgb(var(--danger-soft))',
+};
 
 export default function GaugeRow() {
   const { result, currentTick } = useSimStore();
 
-  if (!result || !result.snapshots || result.snapshots.length === 0) return null;
+  if (!result?.snapshots || result.snapshots.length === 0) return null;
 
   const currentSnapshot = result.snapshots[Math.min(currentTick, result.snapshots.length - 1)];
   if (!currentSnapshot) return null;
@@ -22,128 +45,118 @@ export default function GaugeRow() {
   const diskRecentBusy = recentSnapshots.filter(s => s.disk_busy).length;
   const diskPercent = Math.round((diskRecentBusy / recentSnapshots.length) * 100);
 
+  // Same thresholds as before: CPU > 85 high, RAM > 75 high / > 90 critical, Disk > 80 high
+  const cpuLevel: Level = cpuPercent > 85 ? 'high' : 'normal';
+  let ramLevel: Level = 'normal';
+  if (ramPercent > 90) ramLevel = 'critical';
+  else if (ramPercent > 75) ramLevel = 'high';
+  const diskLevel: Level = diskPercent > 80 ? 'high' : 'normal';
+
   return (
-    <div className="space-y-3">
+    <section aria-labelledby="gauge-row-title" className="bg-surface border border-line rounded-xl p-4 sm:p-5">
+      <div className="mb-4">
+        <h3 id="gauge-row-title" className="text-base font-semibold text-ink">การใช้ทรัพยากรขณะนี้</h3>
+        <p className="text-sm text-muted">CPU และ Disk คิดจาก 20 tick ล่าสุด ส่วน RAM คิดจากเฟรมที่ใช้อยู่ ณ tick นี้</p>
+      </div>
+
       {currentSnapshot.thrashing && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-3.5 py-2.5 rounded-lg flex items-center space-x-2.5 text-xs shadow-subtle">
-          <AlertTriangle className="text-rose-500 shrink-0" size={16} />
-          <div>
-            <span className="font-bold text-rose-600">Thrashing Alert: </span>
-            <span className="text-slate-600 font-medium">ระบบสูญเสียรอบประมวลผลไปกับการสลับหน้าข้อมูลลงดิสก์อย่างต่อเนื่อง (Paging Overhead)</span>
-          </div>
+        <div className="mb-4 flex items-start gap-2.5 border-l-[3px] border-danger bg-danger-soft rounded-r-lg px-3.5 py-2.5 text-sm">
+          <AlertTriangle size={16} className="text-danger shrink-0 mt-0.5" />
+          <p className="text-ink leading-relaxed">
+            <span className="font-semibold text-danger">กำลัง thrashing</span>{' '}
+            ระบบสูญเสียรอบประมวลผลไปกับการสลับหน้าข้อมูลลงดิสก์อย่างต่อเนื่อง (paging overhead)
+          </p>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* CPU Utilization */}
-        <div className="glass-panel border border-border-subtle rounded-xl p-3.5 flex flex-col justify-between shadow-card">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <div className="p-1.5 bg-pastel-blue/30 rounded-md border border-pastel-blue shadow-sm">
-                 <Cpu className="text-blue-600" size={16} />
-              </div>
-              <div>
-                <span className="font-bold text-xs text-slate-800 block tracking-tight">CPU Utilization</span>
-                <span className="text-[10px] text-slate-500 block font-mono">CORE 0</span>
-              </div>
-            </div>
-            <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border shadow-sm ${
-              currentSnapshot.cpu_busy 
-                ? 'bg-pastel-blue/40 text-blue-700 border-pastel-blue' 
-                : 'bg-slate-100 text-slate-500 border-slate-300'
-            }`}>
-              {currentSnapshot.cpu_busy ? 'BUSY' : 'IDLE'}
-            </span>
-          </div>
-          <div className="space-y-2 mt-2">
-            <div className="flex justify-between items-baseline">
-              <span className="text-2xl font-bold font-mono text-slate-800 tracking-tight">{cpuPercent}%</span>
-              <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 rounded">
-                {currentSnapshot.running !== null ? `PID ${currentSnapshot.running}` : 'NONE'}
+      <div className="grid grid-cols-3 gap-3 md:gap-6">
+        <Meter
+          label="CPU"
+          value={cpuPercent}
+          level={cpuLevel}
+          color={CHART.cpu}
+          active={currentSnapshot.cpu_busy}
+          detail={
+            currentSnapshot.running !== null ? (
+              <span>
+                กำลังรัน <span className="font-mono">P{currentSnapshot.running}</span>
               </span>
-            </div>
-            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden shadow-inner">
-              <div 
-                className={`h-full transition-all duration-200 ${
-                  cpuPercent > 85 ? 'bg-amber-500' : 'bg-blue-500'
-                }`}
-                style={{ width: `${cpuPercent}%` }}
-              />
-            </div>
-          </div>
-        </div>
+            ) : (
+              <span>ไม่มี process รัน</span>
+            )
+          }
+        />
+        <Meter
+          label="RAM"
+          value={ramPercent}
+          level={ramLevel}
+          color={CHART.ram}
+          detail={
+            <>
+              <span>
+                <span className="font-mono">{occupiedFrames}/{totalFrames}</span> เฟรม
+              </span>
+              {result.metrics && (
+                <span>
+                  page fault รวม <span className="font-mono">{result.metrics.total_page_faults}</span>
+                </span>
+              )}
+            </>
+          }
+        />
+        <Meter
+          label="Disk I/O"
+          value={diskPercent}
+          level={diskLevel}
+          color={CHART.disk}
+          active={currentSnapshot.disk_busy}
+          detail={
+            <span>
+              คิว <span className="font-mono">{currentSnapshot.disk_queue?.length || 0}</span>
+            </span>
+          }
+        />
+      </div>
+    </section>
+  );
+}
 
-        {/* RAM Utilization */}
-        <div className="glass-panel border border-border-subtle rounded-xl p-3.5 flex flex-col justify-between shadow-card">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <div className="p-1.5 bg-pastel-green/30 rounded-md border border-pastel-green shadow-sm">
-                 <Database className="text-emerald-600" size={16} />
-              </div>
-              <div>
-                <span className="font-bold text-xs text-slate-800 block tracking-tight">RAM Usage</span>
-                <span className="text-[10px] text-slate-500 block font-mono">PHYSICAL FRAMES</span>
-              </div>
-            </div>
-            <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-300 shadow-sm">
-              {occupiedFrames}/{totalFrames} frames
-            </span>
-          </div>
-          <div className="space-y-2 mt-2">
-            <div className="flex justify-between items-baseline">
-              <span className="text-2xl font-bold font-mono text-slate-800 tracking-tight">{ramPercent}%</span>
-              <span className="text-[11px] font-mono font-bold text-amber-500 bg-amber-50 px-1.5 rounded">
-                {result.metrics ? `PF: ${result.metrics.total_page_faults}` : ''}
-              </span>
-            </div>
-            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden shadow-inner">
-              <div 
-                className={`h-full transition-all duration-200 ${
-                  ramPercent > 90 ? 'bg-red-500' : ramPercent > 75 ? 'bg-amber-500' : 'bg-emerald-500'
-                }`}
-                style={{ width: `${ramPercent}%` }}
-              />
-            </div>
-          </div>
-        </div>
+interface MeterProps {
+  label: string;
+  value: number;
+  level: Level;
+  // the resource's series colour (used while below the warning threshold)
+  color: string;
+  // busy/idle state of the device right now (omitted for RAM)
+  active?: boolean;
+  detail: ReactNode;
+}
 
-        {/* Disk I/O Utilization */}
-        <div className="glass-panel border border-border-subtle rounded-xl p-3.5 flex flex-col justify-between shadow-card">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <div className="p-1.5 bg-pastel-yellow/50 rounded-md border border-pastel-yellow shadow-sm">
-                 <HardDrive className="text-amber-600" size={16} />
-              </div>
-              <div>
-                <span className="font-bold text-xs text-slate-800 block tracking-tight">Disk I/O</span>
-                <span className="text-[10px] text-slate-500 block font-mono">SWAP & STORAGE</span>
-              </div>
-            </div>
-            <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border shadow-sm ${
-              currentSnapshot.disk_busy 
-                ? 'bg-pastel-yellow/60 text-amber-700 border-pastel-yellow' 
-                : 'bg-slate-100 text-slate-500 border-slate-300'
-            }`}>
-              {currentSnapshot.disk_busy ? 'ACTIVE' : 'IDLE'}
-            </span>
-          </div>
-          <div className="space-y-2 mt-2">
-            <div className="flex justify-between items-baseline">
-              <span className="text-2xl font-bold font-mono text-slate-800 tracking-tight">{diskPercent}%</span>
-              <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 rounded">
-                Queue: {currentSnapshot.disk_queue?.length || 0}
-              </span>
-            </div>
-            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden shadow-inner">
-              <div 
-                className={`h-full transition-all duration-200 ${
-                  diskPercent > 80 ? 'bg-amber-500' : 'bg-blue-500'
-                }`}
-                style={{ width: `${diskPercent}%` }}
-              />
-            </div>
-          </div>
-        </div>
+function Meter({ label, value, level, color, active, detail }: Readonly<MeterProps>) {
+  return (
+    <div className="min-w-0 flex flex-col items-center text-center gap-2 md:flex-row md:items-center md:text-left md:gap-4">
+      <RingGauge
+        value={value}
+        color={level === 'normal' ? color : RING_COLOR[level]}
+        trackColor={TRACK_COLOR[level]}
+        size={72}
+        stroke={8}
+        label={label}
+        valueClassName={VALUE_TONE[level]}
+      />
+
+      <div className="min-w-0 space-y-1">
+        <p className="text-sm font-semibold text-ink">{label}</p>
+        <div className="flex flex-col gap-0.5 text-xs text-muted tabular-nums">{detail}</div>
+        {active !== undefined && (
+          <p className="inline-flex items-center gap-1.5 text-xs text-muted">
+            <span
+              aria-hidden="true"
+              className={`w-1.5 h-1.5 rounded-full transition-colors ${active ? 'bg-primary' : 'bg-subtle'}`}
+            />
+            {active ? 'ทำงาน' : 'ว่าง'}
+          </p>
+        )}
       </div>
     </div>
   );

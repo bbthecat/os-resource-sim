@@ -1,9 +1,61 @@
-import { useSimStore } from '../store/useSimStore';
-import { pidColor } from '../lib/colors';
-import { PlayCircle, Clock, Disc, AlertCircle } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useSimStore, isPidShown } from '../store/useSimStore';
+import { pidColor, statusStyle } from '../lib/colors';
+import { PlayCircle, Clock, Disc, AlertCircle, type LucideIcon } from 'lucide-react';
+
+interface LaneProps {
+  icon: LucideIcon;
+  status: string;
+  label: string;
+  count?: number;
+  children: ReactNode;
+}
+
+function Lane({ icon: Icon, status, label, count, children }: Readonly<LaneProps>) {
+  return (
+    <div className="bg-surface-muted rounded-lg p-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2 text-sm font-medium text-ink">
+        <span className="flex items-center gap-1.5">
+          <Icon size={14} style={{ color: statusStyle(status).dot }} />
+          {label}
+        </span>
+        {count !== undefined && (
+          <span className="min-w-[1.5rem] px-1.5 rounded-full bg-surface text-xs text-muted text-center tabular-nums">
+            {count}
+          </span>
+        )}
+      </div>
+      <div className="min-h-[36px] flex flex-wrap gap-1 items-center">{children}</div>
+    </div>
+  );
+}
+
+function PidChip({ pid, label, dimmed = false }: Readonly<{ pid: number; label?: string; dimmed?: boolean }>) {
+  return (
+    <span
+      className={`px-2 py-0.5 rounded-md text-white text-xs font-mono font-medium transition-opacity ${dimmed ? 'opacity-30' : ''}`}
+      style={{ backgroundColor: pidColor(pid) }}
+      title={dimmed ? `P${pid} (ซ่อนจากตัวกรอง)` : undefined}
+    >
+      {label ?? `P${pid}`}
+    </span>
+  );
+}
+
+function PidList({ pids, hiddenPids }: Readonly<{ pids: number[]; hiddenPids: number[] }>) {
+  if (pids.length === 0) return <span className="text-xs text-subtle">ว่าง</span>;
+  // hidden processes stay in the lane (dimmed) so the queue length still reads true
+  return (
+    <>
+      {pids.map((pid, idx) => (
+        <PidChip key={`${pid}-${idx}`} pid={pid} dimmed={!isPidShown(hiddenPids, pid)} />
+      ))}
+    </>
+  );
+}
 
 export default function QueueLane() {
-  const { result, currentTick } = useSimStore();
+  const { result, currentTick, hiddenPids } = useSimStore();
 
   if (!result || !result.snapshots || result.snapshots.length === 0) return null;
 
@@ -11,113 +63,37 @@ export default function QueueLane() {
   if (!current) return null;
 
   return (
-    <div className="glass-panel border border-border-subtle rounded-xl p-4 space-y-3 shadow-card">
-      <div className="flex items-center justify-between border-b border-border-subtle pb-2">
-        <div>
-          <h3 className="text-xs font-bold text-slate-800">สถานะโปรเซสและคิวงานในระบบ</h3>
-          <p className="text-[10px] text-slate-500 font-mono tracking-wider">PROCESS LIFECYCLE & DISPATCH QUEUES</p>
-        </div>
+    <section className="bg-surface border border-line rounded-xl p-4 sm:p-5 space-y-4">
+      <div>
+        <h3 className="text-base font-semibold text-ink">สถานะโปรเซสและคิวงานในระบบ</h3>
+        <p className="mt-0.5 text-sm text-muted">process ที่กำลังรันและที่รออยู่ในแต่ละคิว ณ tick ปัจจุบัน</p>
       </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        {/* Running */}
-        <div className="bg-white border border-border-subtle rounded-md p-2.5 flex flex-col justify-between shadow-sm">
-          <div className="flex items-center space-x-1.5 text-xs font-bold text-emerald-600 mb-2">
-            <PlayCircle size={14} className="text-emerald-500" />
-            <span>Running on CPU</span>
-          </div>
-          <div className="min-h-[44px] flex items-center justify-center bg-slate-50 rounded-md border border-border-subtle p-1.5">
-            {current.running !== null ? (
-              <span 
-                className="px-2.5 py-1 rounded font-mono font-bold text-white text-xs border border-white/40 shadow-sm flex items-center space-x-1"
-                style={{ backgroundColor: pidColor(current.running) }}
-              >
-                <span>PID {current.running}</span>
-              </span>
-            ) : (
-              <span className="text-slate-400 text-[11px] font-mono font-bold">CPU IDLE</span>
-            )}
-          </div>
-        </div>
 
-        {/* Ready Queue */}
-        <div className="bg-white border border-border-subtle rounded-md p-2.5 flex flex-col justify-between shadow-sm">
-          <div className="flex items-center justify-between text-xs font-bold text-blue-600 mb-2">
-            <div className="flex items-center space-x-1.5">
-              <Clock size={14} className="text-blue-500" />
-              <span>Ready Queue</span>
-            </div>
-            <span className="text-slate-400 font-mono text-[10px] bg-slate-100 px-1 rounded">({current.ready.length})</span>
-          </div>
-          <div className="min-h-[44px] flex flex-wrap gap-1 items-center bg-slate-50 rounded-md border border-border-subtle p-1.5">
-            {current.ready.length > 0 ? (
-              current.ready.map((pid, idx) => (
-                <span 
-                  key={`${pid}-${idx}`}
-                  className="px-2 py-0.5 rounded-md text-white text-[11px] font-mono font-bold border border-white/40 shadow-sm"
-                  style={{ backgroundColor: pidColor(pid) }}
-                >
-                  P{pid}
-                </span>
-              ))
-            ) : (
-              <span className="text-slate-400 text-[11px] font-mono font-bold">EMPTY</span>
-            )}
-          </div>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <Lane icon={PlayCircle} status="RUNNING" label="Running on CPU">
+          {current.running !== null ? (
+            <PidChip
+              pid={current.running}
+              label={`PID ${current.running}`}
+              dimmed={!isPidShown(hiddenPids, current.running)}
+            />
+          ) : (
+            <span className="text-xs text-subtle">CPU ว่าง</span>
+          )}
+        </Lane>
 
-        {/* Waiting I/O */}
-        <div className="bg-white border border-border-subtle rounded-md p-2.5 flex flex-col justify-between shadow-sm">
-          <div className="flex items-center justify-between text-xs font-bold text-amber-600 mb-2">
-            <div className="flex items-center space-x-1.5">
-              <Disc size={14} className="text-amber-500" />
-              <span>Waiting I/O (Disk)</span>
-            </div>
-            <span className="text-slate-400 font-mono text-[10px] bg-slate-100 px-1 rounded">({current.waiting_io.length})</span>
-          </div>
-          <div className="min-h-[44px] flex flex-wrap gap-1 items-center bg-slate-50 rounded-md border border-border-subtle p-1.5">
-            {current.waiting_io.length > 0 ? (
-              current.waiting_io.map((pid, idx) => (
-                <span 
-                  key={`${pid}-${idx}`}
-                  className="px-2 py-0.5 rounded-md text-white text-[11px] font-mono font-bold border border-white/40 shadow-sm"
-                  style={{ backgroundColor: pidColor(pid) }}
-                >
-                  P{pid}
-                </span>
-              ))
-            ) : (
-              <span className="text-slate-400 text-[11px] font-mono font-bold">EMPTY</span>
-            )}
-          </div>
-        </div>
+        <Lane icon={Clock} status="READY" label="Ready queue" count={current.ready.length}>
+          <PidList pids={current.ready} hiddenPids={hiddenPids} />
+        </Lane>
 
-        {/* Waiting Memory */}
-        <div className="bg-white border border-border-subtle rounded-md p-2.5 flex flex-col justify-between shadow-sm">
-          <div className="flex items-center justify-between text-xs font-bold text-rose-600 mb-2">
-            <div className="flex items-center space-x-1.5">
-              <AlertCircle size={14} className="text-rose-500" />
-              <span>Page Fault Wait</span>
-            </div>
-            <span className="text-slate-400 font-mono text-[10px] bg-slate-100 px-1 rounded">({current.waiting_mem.length})</span>
-          </div>
-          <div className="min-h-[44px] flex flex-wrap gap-1 items-center bg-slate-50 rounded-md border border-border-subtle p-1.5">
-            {current.waiting_mem.length > 0 ? (
-              current.waiting_mem.map((pid, idx) => (
-                <span 
-                  key={`${pid}-${idx}`}
-                  className="px-2 py-0.5 rounded-md text-white text-[11px] font-mono font-bold border border-white/40 shadow-sm"
-                  style={{ backgroundColor: pidColor(pid) }}
-                >
-                  P{pid}
-                </span>
-              ))
-            ) : (
-              <span className="text-slate-400 text-[11px] font-mono font-bold">EMPTY</span>
-            )}
-          </div>
-        </div>
+        <Lane icon={Disc} status="WAITING_IO" label="Waiting I/O (disk)" count={current.waiting_io.length}>
+          <PidList pids={current.waiting_io} hiddenPids={hiddenPids} />
+        </Lane>
+
+        <Lane icon={AlertCircle} status="WAITING_MEM" label="Page fault wait" count={current.waiting_mem.length}>
+          <PidList pids={current.waiting_mem} hiddenPids={hiddenPids} />
+        </Lane>
       </div>
-    </div>
+    </section>
   );
 }

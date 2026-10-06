@@ -1,14 +1,16 @@
 import { useSimStore } from '../store/useSimStore';
-import { Activity, Lightbulb, ArrowRight, GitCompare } from 'lucide-react';
+import { Lightbulb, GitCompare } from 'lucide-react';
 
 interface BottleneckCardProps {
   onOpenCompare?: () => void;
 }
 
-export default function BottleneckCard({ onOpenCompare }: BottleneckCardProps) {
+// What to try next: the suggestion callout + the evidence behind the verdict.
+// The verdict itself (title, recommendation) is shown by ExecutiveSummary right above.
+export default function BottleneckCard({ onOpenCompare }: Readonly<BottleneckCardProps>) {
   const { result, config, setConfig } = useSimStore();
 
-  if (!result || !result.diagnosis) return null;
+  if (!result?.diagnosis) return null;
 
   const { diagnosis } = result;
 
@@ -24,6 +26,7 @@ export default function BottleneckCard({ onOpenCompare }: BottleneckCardProps) {
   };
 
   const hasSuggestions = diagnosis.suggested_config && Object.keys(diagnosis.suggested_config).length > 0;
+  const hasEvidence = diagnosis.evidence && Object.keys(diagnosis.evidence).length > 0;
 
   const getLabelThai = (lbl: string) => {
     switch (lbl) {
@@ -61,90 +64,74 @@ export default function BottleneckCard({ onOpenCompare }: BottleneckCardProps) {
   };
 
   return (
-    <div className={`p-4 rounded-xl border shadow-subtle space-y-3.5 ${
-      isHealthy 
-        ? 'bg-white border-pastel-green' 
-        : 'bg-white border-pastel-yellow'
-    }`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2.5">
-          <div className={`p-1.5 rounded-md ${isHealthy ? 'bg-pastel-green text-emerald-600' : 'bg-pastel-yellow text-amber-600'}`}>
-            <Activity size={18} />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-800">การวินิจฉัยคอขวดของระบบ</h3>
-            <p className="text-[10px] text-slate-500 font-mono tracking-wider">SYSTEM BOTTLENECK TELEMETRY</p>
-          </div>
-        </div>
-        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold border shadow-sm ${
-          isHealthy
-            ? 'bg-pastel-green/40 text-emerald-700 border-pastel-green'
-            : 'bg-pastel-yellow/40 text-amber-700 border-pastel-yellow'
-        }`}>
-          {getLabelThai(diagnosis.label)}
-        </span>
-      </div>
-
-      <div className="space-y-3">
-        <div className="bg-slate-50 p-3 rounded-md border border-border-subtle">
-          <h4 className="text-xs font-bold text-slate-800 mb-1">{diagnosis.title}</h4>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            <span className="text-blue-600 font-bold">คำแนะนำเชิงวิศวกรรม: </span>
-            {diagnosis.recommendation}
-          </p>
-        </div>
-
-        {/* Evidence */}
-        {diagnosis.evidence && Object.keys(diagnosis.evidence).length > 0 && (
-          <div className="bg-white rounded-md p-3 border border-border-subtle shadow-sm">
-            <h5 className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider mb-2">
-              Metric Evidence
-            </h5>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-              {Object.entries(diagnosis.evidence).map(([key, val]) => (
-                <div key={key} className="bg-slate-50 p-2 rounded-md border border-border-subtle">
-                  <span className="text-slate-500 block text-[10px] font-semibold">{translateKey(key)}</span>
-                  <span className="font-mono text-xs font-bold text-slate-800">{String(val)}</span>
-                </div>
-              ))}
+    <section aria-label="สิ่งที่ควรลองต่อ" className="space-y-4">
+      {/* Suggested action */}
+      <div
+        className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-l-[3px] rounded-r-lg px-4 py-3 ${
+          isHealthy ? 'border-primary bg-primary-soft/50' : 'border-warning bg-warning-soft'
+        }`}
+      >
+        <div className="flex items-start gap-2.5 min-w-0 text-sm">
+          <Lightbulb size={16} className={`shrink-0 mt-0.5 ${isHealthy ? 'text-primary' : 'text-warning'}`} />
+          {hasSuggestions ? (
+            <div className="min-w-0 space-y-1.5">
+              <p className="font-medium text-ink">ค่าคอนฟิกที่แนะนำ</p>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(diagnosis.suggested_config).map(([key, val]) => (
+                  <code
+                    key={key}
+                    className="font-mono text-xs text-ink bg-surface border border-line rounded-md px-1.5 py-0.5"
+                  >
+                    {key}: {String(val)}
+                  </code>
+                ))}
+              </div>
+              <p className="text-muted">กดปรับใช้เพื่อใส่ค่านี้ในแถบด้านซ้าย แล้วรันใหม่เพื่อเทียบผล</p>
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="text-ink leading-relaxed">สามารถทดลองเปรียบเทียบพารามิเตอร์เพื่อศึกษาผลกระทบได้ทันที</p>
+          )}
+        </div>
 
-        {/* Suggested Config Action */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-md border border-border-subtle">
-          <div className="flex items-center space-x-2 text-xs text-slate-600">
-            <Lightbulb className="text-amber-500 shrink-0" size={15} />
-            {hasSuggestions ? (
-              <span className="text-xs">
-                ค่าคอนฟิกที่แนะนำ: <strong className="font-mono text-amber-600 text-[11px] bg-amber-100 px-1 rounded">{JSON.stringify(diagnosis.suggested_config)}</strong>
-              </span>
-            ) : (
-              <span className="text-xs text-slate-500">สามารถทดลองเปรียบเทียบพารามิเตอร์เพื่อศึกษาผลกระทบได้ทันที</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
+        {(hasSuggestions || onOpenCompare) && (
+          <div className="flex flex-wrap items-center gap-2 shrink-0 pl-[26px] sm:pl-0">
             {hasSuggestions && (
               <button
                 onClick={applySuggestedConfig}
-                className="flex items-center justify-center space-x-1 px-2.5 py-1.5 bg-pastel-blue hover:bg-blue-300 text-blue-900 rounded-md text-xs font-bold transition shadow-sm"
+                className="inline-flex items-center justify-center px-3.5 py-2 rounded-md bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors"
               >
-                <span>ปรับใช้ค่าแนะนำ</span>
-                <ArrowRight size={13} />
+                ปรับใช้ค่าแนะนำ
               </button>
             )}
             {onOpenCompare && (
               <button
                 onClick={onOpenCompare}
-                className="flex items-center justify-center space-x-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-md text-xs font-bold transition border border-border-subtle shadow-sm"
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-surface border border-line text-sm font-medium text-ink hover:bg-surface-muted hover:border-line-strong transition-colors"
               >
-                <GitCompare size={13} className="text-pastel-purple shrink-0" />
-                <span>เปรียบเทียบ A/B</span>
+                <GitCompare size={15} className="text-primary shrink-0" />
+                เปรียบเทียบ A/B
               </button>
             )}
           </div>
-        </div>
+        )}
       </div>
-    </div>
+
+      {/* Evidence */}
+      {hasEvidence && (
+        <div>
+          <h3 className="text-xs font-medium text-muted">
+            ตัวชี้วัดที่ใช้สรุปว่า{getLabelThai(diagnosis.label)}
+          </h3>
+          <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            {Object.entries(diagnosis.evidence).map(([key, val]) => (
+              <div key={key} className="flex items-baseline gap-2">
+                <dt className="text-muted">{translateKey(key)}</dt>
+                <dd className="font-medium text-ink tabular-nums">{String(val)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+    </section>
   );
 }

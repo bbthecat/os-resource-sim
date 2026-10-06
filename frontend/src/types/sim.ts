@@ -17,6 +17,7 @@ export interface Snapshot {
   waiting_io: number[];
   waiting_mem: number[];
   frames: (number | null)[];
+  frame_pages: (number | null)[];
   disk_busy: boolean;
   disk_queue: number[];
   cpu_busy: boolean;
