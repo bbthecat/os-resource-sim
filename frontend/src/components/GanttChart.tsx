@@ -117,7 +117,7 @@ export default function GanttChart() {
                 ))}
               </div>
 
-              {pids.map((pid, rowIndex) => (
+              {pids.map((pid) => (
                 <div 
                   key={String(pid)} 
                   className={`relative h-12 border-b border-border-subtle/50 last:border-b-0 w-full overflow-hidden`}
