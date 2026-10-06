@@ -17,18 +17,20 @@ import ExportReportModal from '../ExportReportModal';
 import CustomWorkloadModal from '../CustomWorkloadModal';
 import ScenarioPresetsModal from '../ScenarioPresetsModal';
 import Header from './Header';
+import CustomView from './CustomView';
 import { usePlayback } from '../../hooks/usePlayback';
 import { useHotkeys } from '../../hooks/useHotkeys';
 import { useSimStore } from '../../store/useSimStore';
 import { BookOpen, GitCompare, Layers, X } from 'lucide-react';
 
-type TabId = 'overview' | 'cpu' | 'memory' | 'details';
+type TabId = 'overview' | 'cpu' | 'memory' | 'details' | 'custom';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'overview', label: 'ภาพรวม' },
   { id: 'cpu', label: 'CPU' },
   { id: 'memory', label: 'Memory' },
   { id: 'details', label: 'รายละเอียด' },
+  { id: 'custom', label: 'มุมมองของฉัน' },
 ];
 
 // Which tab holds the evidence for each bottleneck diagnosis
@@ -162,6 +164,7 @@ export default function Shell() {
                     <EventLog />
                   </div>
                 )}
+                {tab === 'custom' && <CustomView onOpenCompare={() => setIsCompareOpen(true)} />}
               </div>
             </div>
           ) : (

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSimStore } from '../store/useSimStore';
 import { Layers, MousePointerClick, Radio, ListOrdered } from 'lucide-react';
 
+type PidFilter = number | 'all';
+
 interface TraceStep {
   tick: number;
   // tick at which the frames shown in this column exist (load tick for misses)
@@ -13,12 +15,23 @@ interface TraceStep {
   frameOwners: (number | null)[];
 }
 
+// What a frame shows in one column for the current process filter: `page:owner`, or null when blank
+function cellKey(trace: TraceStep, frameIdx: number, pid: PidFilter): string | null {
+  const page = trace.framesState[frameIdx];
+  const owner = trace.frameOwners[frameIdx];
+  if (page === null || page === undefined || owner === null || owner === undefined) return null;
+  if (pid !== 'all' && owner !== pid) return null;
+  return `${page}:${owner}`;
+}
+
 export default function PageFaultTrace() {
   const { result, currentTick } = useSimStore();
-  const [selectedPid, setSelectedPid] = useState<number | 'all'>('all');
+  // null = not chosen yet (defaults to the first process); 'all' mixes processes, so it is opt-in
+  const [pidChoice, setPidChoice] = useState<PidFilter | null>(null);
   const [followTimeline, setFollowTimeline] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const latestColRef = useRef<HTMLDivElement>(null);
+  const gutterRef = useRef<HTMLDivElement>(null);
 
   // Extract all processes that made memory accesses
   const pidsWithMemory = useMemo(() => {
@@ -33,6 +46,14 @@ export default function PageFaultTrace() {
     });
     return Array.from(pids).sort((a, b) => a - b);
   }, [result]);
+
+  // Fall back to the first process when nothing is chosen or the chosen one is not in this result
+  const selectedPid: PidFilter =
+    pidChoice === 'all'
+      ? 'all'
+      : pidChoice !== null && pidsWithMemory.includes(pidChoice)
+        ? pidChoice
+        : (pidsWithMemory[0] ?? 'all');
 
   const traces = useMemo(() => {
     if (!result || !result.snapshots) return [];
@@ -102,6 +123,16 @@ export default function PageFaultTrace() {
     : null;
   const latestIdx = latestShownAt === null ? -1 : visibleTraces.findIndex(t => t.shownAt === latestShownAt);
 
+  const numFrames = result?.config.ram_frames ?? 0;
+  // Frames that hold something (for this process filter) in at least one visible column, in frame order
+  const shownFrames = useMemo(() => {
+    const used: number[] = [];
+    for (let f = 0; f < numFrames; f++) {
+      if (visibleTraces.some(t => cellKey(t, f, selectedPid) !== null)) used.push(f);
+    }
+    return used;
+  }, [visibleTraces, numFrames, selectedPid]);
+
   // Keep the newest column in view horizontally (never scrolls the page vertically)
   useEffect(() => {
     const box = scrollRef.current;
@@ -109,10 +140,12 @@ export default function PageFaultTrace() {
     if (!followTimeline || !box || !col) return;
     const colLeft = col.offsetLeft;
     const colRight = colLeft + col.offsetWidth;
+    // the sticky frame-index gutter covers the left edge, so treat it as off-screen
+    const gutter = gutterRef.current?.offsetWidth ?? 0;
     if (colRight > box.scrollLeft + box.clientWidth - 24) {
       box.scrollLeft = colRight - box.clientWidth + 24;
-    } else if (colLeft < box.scrollLeft) {
-      box.scrollLeft = Math.max(0, colLeft - 24);
+    } else if (colLeft < box.scrollLeft + gutter) {
+      box.scrollLeft = Math.max(0, colLeft - gutter - 24);
     }
   }, [followTimeline, latestIdx, visibleTraces.length]);
 
@@ -123,7 +156,6 @@ export default function PageFaultTrace() {
     { id: true, label: 'ตาม timeline', Icon: Radio },
     { id: false, label: 'ทั้งหมด', Icon: ListOrdered },
   ];
-  const numFrames = result.config.ram_frames;
 
   return (
     <section className="bg-surface border border-line rounded-xl p-4 sm:p-5 space-y-5">
@@ -162,7 +194,7 @@ export default function PageFaultTrace() {
             <select
               className="bg-surface border border-line rounded-md px-2.5 py-1.5 text-sm text-ink cursor-pointer outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               value={selectedPid}
-              onChange={(e) => setSelectedPid(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+              onChange={(e) => setPidChoice(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
             >
               <option value="all">All processes</option>
               {pidsWithMemory.map(pid => (
@@ -185,74 +217,100 @@ export default function PageFaultTrace() {
           <p className="text-xs mt-1">Try a workload that uses memory (e.g. Memory Hog)</p>
         </div>
       ) : (
-        <div ref={scrollRef} className="relative bg-surface p-6 rounded-lg border border-line overflow-x-auto">
+        <div ref={scrollRef} className="relative bg-surface py-4 pr-4 rounded-lg border border-line overflow-x-auto">
           {/* full scroll width, so the sticky labels below stay pinned while the table scrolls */}
           <div className="w-max min-w-full">
-          <div className="flex items-center mb-8 gap-4">
-            <span className="sticky left-0 z-10 bg-surface pl-2 pr-4 text-primary-ink text-lg leading-tight font-semibold">Page<br/>reference</span>
-            <span className="text-primary-ink text-lg tracking-widest font-semibold font-mono tabular-nums whitespace-nowrap">
+          <div className="flex items-center mb-4 gap-3">
+            <span className="sticky left-0 z-10 bg-surface pl-4 pr-3 text-primary-ink text-base leading-tight font-semibold">Page<br/>reference</span>
+            <span className="text-primary-ink text-base tracking-wide font-semibold font-mono tabular-nums whitespace-nowrap">
               {visibleTraces.length > 0 ? visibleTraces.map(t => t.pageRequested).join(',') : '–'}
             </span>
           </div>
 
           {visibleTraces.length === 0 && (
-            <p className="ml-16 pb-4 text-sm text-muted">
+            <p className="sticky left-0 w-max pl-4 pb-4 text-sm text-muted">
               ยังไม่มีการเข้าถึงหน่วยความจำจนถึง tick <span className="font-mono tabular-nums">{currentTick}</span> กดเล่นหรือเลื่อน timeline เพื่อดูต่อ
             </p>
           )}
 
-          <div className="flex items-start gap-4 sm:gap-6 ml-16 pb-4">
-            {visibleTraces.map((trace, idx) => (
+          {visibleTraces.length > 0 && shownFrames.length < numFrames && (
+            <p className="sticky left-0 w-max pl-4 mb-3 text-xs text-muted">
+              แสดง <span className="font-mono tabular-nums">{shownFrames.length}</span> จาก{' '}
+              <span className="font-mono tabular-nums">{numFrames}</span> เฟรม (ซ่อนเฟรมที่ว่างตลอดช่วงนี้)
+            </p>
+          )}
+
+          {visibleTraces.length > 0 && (
+          <div className="flex items-start gap-1.5 pt-1 pb-2">
+            {/* frame index gutter, pinned left like the Page reference label */}
+            <div ref={gutterRef} className="sticky left-0 z-10 self-stretch bg-surface flex flex-col gap-1 pl-4 pr-1.5 shrink-0" aria-hidden>
+              <div className="h-5" />
+              <div className="border-y border-transparent">
+                {shownFrames.map(f => (
+                  <div key={f} className="h-[26px] flex items-center justify-end text-xs font-mono tabular-nums text-subtle">
+                    F{f}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {visibleTraces.map((trace, idx) => {
+              const prev = idx > 0 ? visibleTraces[idx - 1] : null;
+              return (
               <div
                 key={`${trace.tick}-${trace.pid}-${idx}`}
                 ref={idx === latestIdx ? latestColRef : undefined}
-                className={`flex flex-col items-center w-10 sm:w-12 shrink-0 relative group rounded-md ${
-                  idx === latestIdx ? 'ring-2 ring-primary ring-offset-4 ring-offset-surface' : ''
+                className={`flex flex-col items-center gap-1 w-8 shrink-0 relative group rounded-md ${
+                  idx === latestIdx ? 'ring-2 ring-primary ring-offset-2 ring-offset-surface' : ''
                 }`}
               >
                 {/* Optional tick tooltip */}
-                <div className="absolute -top-6 text-xs font-mono tabular-nums text-subtle opacity-0 group-hover:opacity-100 transition-opacity">T{trace.tick}</div>
+                <div className="absolute -top-5 text-xs font-mono tabular-nums text-subtle opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">T{trace.tick}</div>
 
-                <div className="text-primary-ink text-lg mb-2 font-semibold font-mono tabular-nums">{trace.pageRequested}</div>
+                <div className="h-5 leading-5 text-sm font-semibold font-mono tabular-nums text-primary-ink">{trace.pageRequested}</div>
 
-                <div className="border border-line-strong flex flex-col w-full bg-surface">
-                  {Array.from({ length: numFrames }).map((_, frameIdx) => {
+                <div className="w-full flex flex-col rounded-md border border-line-strong overflow-hidden bg-surface">
+                  {shownFrames.map(frameIdx => {
                     const page = trace.framesState[frameIdx];
                     const owner = trace.frameOwners[frameIdx];
-                    // If we are looking at a specific process, only show its pages
-                    const isOwnerMatch = selectedPid === 'all' || owner === selectedPid;
-                    const displayVal = (page !== null && owner !== null && isOwnerMatch) ? page : '';
+                    const key = cellKey(trace, frameIdx, selectedPid);
                     // The frame that holds the requested page: tinted as a fault or a hit
-                    const isRequested = displayVal !== '' && page === trace.pageRequested && owner === trace.pid;
-                    let tone = 'text-primary-ink';
-                    if (isRequested) tone = trace.isHit ? 'bg-primary-soft text-primary-ink' : 'bg-danger-soft text-danger';
+                    const isRequested = key !== null && page === trace.pageRequested && owner === trace.pid;
+                    // Same page and owner as this frame in the previous column: carried over, so faded
+                    const isStale = key !== null && prev !== null && cellKey(prev, frameIdx, selectedPid) === key;
+                    let tone: string;
+                    if (isRequested) tone = trace.isHit ? 'bg-primary-soft text-primary-ink font-semibold' : 'bg-danger-soft text-danger font-semibold';
+                    else if (isStale) tone = 'text-subtle font-normal';
+                    else tone = 'text-ink font-semibold';
 
                     return (
                       <div
                         key={frameIdx}
-                        className={`h-10 sm:h-12 border-b border-line flex items-center justify-center text-lg font-semibold font-mono tabular-nums last:border-b-0 ${tone}`}
-                        title={owner !== null ? `P${owner}` : undefined}
+                        className={`h-[26px] border-b border-line last:border-b-0 flex items-center justify-center text-sm font-mono tabular-nums ${tone}`}
+                        title={key !== null ? `F${frameIdx} P${owner}` : `F${frameIdx}`}
                       >
-                        {displayVal}
+                        {key !== null ? page : ''}
                       </div>
                     );
                   })}
                 </div>
 
-                <div className={`mt-4 text-sm sm:text-base font-semibold ${trace.isHit ? 'text-primary-ink' : 'text-danger'}`}>
+                <div className={`text-[11px] leading-4 font-semibold ${trace.isHit ? 'text-primary-ink' : 'text-danger'}`}>
                   {trace.isHit ? 'Hit' : 'Miss'}
                 </div>
               </div>
-            ))}
+              );
+            })}
             {/* end spacer: padding-right and zero-height boxes do not count toward scroll width, so the latest column ring would clip */}
             <div className="w-2 h-px shrink-0" aria-hidden />
           </div>
+          )}
 
-          <div className="sticky left-0 w-max mt-8 pl-2 pr-4 bg-surface text-primary-ink font-semibold space-y-1">
-            <div className="text-lg">
+          <div className="sticky left-0 w-max mt-4 pl-4 pr-4 bg-surface text-primary-ink font-semibold space-y-0.5">
+            <div className="text-base">
               No. of Page frame = <span className="font-mono tabular-nums">{numFrames}</span>
             </div>
-            <div className="text-xl">
+            <div className="text-lg">
               Total Page Fault = <span className="font-mono tabular-nums">{totalFaults}</span>
             </div>
           </div>

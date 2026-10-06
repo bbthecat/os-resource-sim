@@ -26,8 +26,11 @@ export function AnimatedSlider({
     <div className="w-full flex flex-col gap-2">
       {(label || value !== undefined) && (
         <div className="flex justify-between items-baseline gap-2">
-          {label && <label className="text-sm font-medium text-ink">{label}</label>}
-          <div className="flex items-baseline overflow-hidden h-5">
+          {label && <span className="text-sm font-medium text-ink">{label}</span>}
+          <div
+            aria-hidden="true"
+            className="inline-flex items-baseline shrink-0 overflow-hidden h-6 rounded-full bg-primary-soft px-2 py-0.5 font-mono text-xs text-primary-ink"
+          >
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.span
                 key={value}
@@ -35,12 +38,12 @@ export function AnimatedSlider({
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -6, opacity: 0 }}
                 transition={{ duration: 0.15, ease: 'easeOut' }}
-                className="text-sm font-semibold text-primary tabular-nums"
+                className="font-semibold tabular-nums leading-5"
               >
                 {value}
               </motion.span>
             </AnimatePresence>
-            {unit && <span className="ml-1 text-xs text-muted">{unit}</span>}
+            {unit && <span className="ml-1 leading-5 text-primary-ink/70">{unit}</span>}
           </div>
         </div>
       )}
@@ -58,10 +61,11 @@ export function AnimatedSlider({
         </Slider.Track>
         <Slider.Thumb
           aria-label={label}
+          aria-valuetext={unit ? `${value} ${unit}` : undefined}
           className="block w-4 h-4 rounded-full bg-surface border-2 border-primary shadow-card cursor-grab active:cursor-grabbing hover:border-primary-hover transition-colors"
         />
       </Slider.Root>
-      <div className="flex justify-between text-xs text-subtle tabular-nums">
+      <div className="flex justify-between -mt-1 text-xs text-subtle tabular-nums">
         <span>{min} {unit}</span>
         <span>{max} {unit}</span>
       </div>

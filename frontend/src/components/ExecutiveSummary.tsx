@@ -1,9 +1,157 @@
 import { useState, useMemo } from 'react';
 import { useSimStore } from '../store/useSimStore';
-import { CheckCircle2, AlertTriangle, ChevronDown, FastForward, Radio, BarChart3 } from 'lucide-react';
+import { Check, AlertTriangle, AlertOctagon, ChevronDown, FastForward, Radio, BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Sparkline from './ui/Sparkline';
+import { CHART } from '../lib/colors';
+import type { Snapshot } from '../types/sim';
 
-// The verdict for the overview tab: open content on the page background, not a card
+// Rolling window (ticks) for the CPU / Disk / thrashing trend lines
+const TREND_WINDOW = 10;
+// Sparklines never draw more than this many points, so 50 ticks/s playback stays cheap
+const MAX_POINTS = 120;
+
+type Tone = 'normal' | 'warning' | 'danger';
+
+const VALUE_TONE: Record<Tone, string> = {
+  normal: 'text-ink',
+  warning: 'text-warning',
+  danger: 'text-danger',
+};
+
+type Verdict = 'healthy' | 'bottleneck' | 'critical';
+
+const VERDICT_STYLE: Record<Verdict, { band: string; disc: string; eyebrow: string; rule: string; label: string }> = {
+  healthy: {
+    band: 'bg-primary-soft border-primary/25',
+    disc: 'bg-primary',
+    eyebrow: 'text-primary-ink',
+    rule: 'border-primary/25',
+    label: 'ไม่พบคอขวด',
+  },
+  bottleneck: {
+    band: 'bg-warning-soft border-warning-line',
+    disc: 'bg-warning',
+    eyebrow: 'text-warning',
+    rule: 'border-warning-line',
+    label: 'พบคอขวด',
+  },
+  critical: {
+    band: 'bg-danger-soft border-danger-line',
+    disc: 'bg-danger',
+    eyebrow: 'text-danger',
+    rule: 'border-danger-line',
+    label: 'พบคอขวดรุนแรง',
+  },
+};
+
+// Per-tick trend values for the whole run (computed once per result)
+interface TrendSeries {
+  cpu: number[];
+  disk: number[];
+  fault: number[];
+  thrash: number[];
+  ready: number[];
+  finished: number[];
+  readyMax: number;
+  finishedMax: number;
+}
+
+// Processes finishing at each tick: per-process finish_time when available (same source as the
+// live tile value), otherwise unique `finish:` events
+function finishesPerTick(snaps: Snapshot[], perProcess: any[] | undefined): number[] {
+  const n = snaps.length;
+  const finishAt = new Array<number>(n).fill(0);
+  if (Array.isArray(perProcess)) {
+    perProcess.forEach((p: any) => {
+      if (p?.finish_time === null || p?.finish_time === undefined) return;
+      const idx = Math.max(0, Math.ceil(p.finish_time));
+      if (idx < n) finishAt[idx]++;
+    });
+    return finishAt;
+  }
+  const seen = new Set<string>();
+  snaps.forEach((s, i) => {
+    s.events?.forEach(e => {
+      if (e.startsWith('finish:') && !seen.has(e)) {
+        seen.add(e);
+        finishAt[i]++;
+      }
+    });
+  });
+  return finishAt;
+}
+
+function buildTrends(snaps: Snapshot[], perProcess: any[] | undefined): TrendSeries {
+  const n = snaps.length;
+  const cpuCum = new Array<number>(n);
+  const diskCum = new Array<number>(n);
+  const thrashCum = new Array<number>(n);
+  const cpu = new Array<number>(n);
+  const disk = new Array<number>(n);
+  const thrash = new Array<number>(n);
+  const fault = new Array<number>(n);
+  const ready = new Array<number>(n);
+  const finished = new Array<number>(n);
+  const finishAt = finishesPerTick(snaps, perProcess);
+  const rolling = (cum: number[], i: number) =>
+    ((cum[i] - (i >= TREND_WINDOW ? cum[i - TREND_WINDOW] : 0)) / Math.min(TREND_WINDOW, i + 1)) * 100;
+
+  let c = 0;
+  let d = 0;
+  let th = 0;
+  let faults = 0;
+  let accesses = 0;
+  let done = 0;
+  let readyMax = 0;
+
+  for (let i = 0; i < n; i++) {
+    const s = snaps[i];
+    c += s.cpu_busy ? 1 : 0;
+    d += s.disk_busy ? 1 : 0;
+    th += s.thrashing ? 1 : 0;
+    cpuCum[i] = c;
+    diskCum[i] = d;
+    thrashCum[i] = th;
+
+    s.events?.forEach(e => {
+      if (e.startsWith('page_fault')) faults++;
+      else if (e.startsWith('mem_access:')) accesses++;
+    });
+    done += finishAt[i];
+
+    cpu[i] = rolling(cpuCum, i);
+    disk[i] = rolling(diskCum, i);
+    thrash[i] = rolling(thrashCum, i);
+    // same formula as the live metric: cumulative faults / cumulative memory accesses
+    fault[i] = accesses > 0 ? (faults / accesses) * 100 : 0;
+    ready[i] = s.ready ? s.ready.length : 0;
+    finished[i] = done;
+    if (ready[i] > readyMax) readyMax = ready[i];
+  }
+
+  return { cpu, disk, fault, thrash, ready, finished, readyMax, finishedMax: done };
+}
+
+// Shrink the first `count` values to at most MAX_POINTS by bucket (mean for rates, last value for running totals)
+function downsample(values: number[], count: number, mode: 'mean' | 'last'): number[] {
+  if (count <= MAX_POINTS) return values.slice(0, count);
+  const out = new Array<number>(MAX_POINTS);
+  for (let k = 0; k < MAX_POINTS; k++) {
+    const start = Math.floor((k * count) / MAX_POINTS);
+    const end = Math.floor(((k + 1) * count) / MAX_POINTS);
+    if (mode === 'last') {
+      out[k] = values[end - 1];
+    } else {
+      let sum = 0;
+      for (let i = start; i < end; i++) sum += values[i];
+      out[k] = sum / (end - start);
+    }
+  }
+  return out;
+}
+
+// The verdict for the overview tab: a status-tinted band, then live stat tiles with trend lines
 export default function ExecutiveSummary() {
   const { result, currentTick, setTick } = useSimStore();
   const [showLogic, setShowLogic] = useState(false);
@@ -59,6 +207,28 @@ export default function ExecutiveSummary() {
     };
   }, [result, currentTick]);
 
+  // Full-run trend series, built once per result
+  const trends = useMemo(() => {
+    if (!result?.snapshots || result.snapshots.length === 0) return null;
+    return buildTrends(result.snapshots, (result.metrics as any)?.per_process);
+  }, [result]);
+
+  // Trend lines from t=0 up to the current tick (the whole run in overall mode or at the end)
+  const total = result?.snapshots?.length ?? 0;
+  const showFullRun = viewMode === 'overall' || currentTick >= total - 1;
+  const sparkCount = showFullRun ? total : Math.min(currentTick + 1, total);
+  const sparks = useMemo(() => {
+    if (!trends || sparkCount === 0) return null;
+    return {
+      cpu: downsample(trends.cpu, sparkCount, 'mean'),
+      disk: downsample(trends.disk, sparkCount, 'mean'),
+      fault: downsample(trends.fault, sparkCount, 'last'),
+      thrash: downsample(trends.thrash, sparkCount, 'mean'),
+      ready: downsample(trends.ready, sparkCount, 'mean'),
+      finished: downsample(trends.finished, sparkCount, 'last'),
+    };
+  }, [trends, sparkCount]);
+
   if (!result?.diagnosis) return null;
 
   const { diagnosis, metrics } = result;
@@ -69,20 +239,22 @@ export default function ExecutiveSummary() {
 
   // Display metrics depending on viewMode (Live vs Overall)
   const isLive = viewMode === 'live' && !isAtEnd;
-  const activeMetrics = isLive && liveMetrics ? {
-    cpu: liveMetrics.cpuUtil.toFixed(1) + '%',
-    disk: liveMetrics.diskUtil.toFixed(1) + '%',
-    fault: liveMetrics.pageFaultRate.toFixed(1) + '%',
-    thrash: liveMetrics.thrashingFraction.toFixed(1) + '%',
-    ready: liveMetrics.readyQueue.toFixed(0) + ' ตัว',
-    finished: liveMetrics.finishedProcs + ' ตัว',
+  const values = isLive && liveMetrics ? {
+    cpu: liveMetrics.cpuUtil,
+    disk: liveMetrics.diskUtil,
+    fault: liveMetrics.pageFaultRate,
+    thrash: liveMetrics.thrashingFraction,
+    ready: liveMetrics.readyQueue,
+    readyDigits: 0,
+    finished: liveMetrics.finishedProcs,
   } : {
-    cpu: (metrics.cpu_util * 100).toFixed(1) + '%',
-    disk: (metrics.disk_util * 100).toFixed(1) + '%',
-    fault: (metrics.page_fault_rate * 100).toFixed(1) + '%',
-    thrash: (metrics.thrashing_fraction * 100).toFixed(1) + '%',
-    ready: metrics.avg_ready_queue.toFixed(1) + ' ตัว',
-    finished: metrics.finished_processes + ' ตัว',
+    cpu: metrics.cpu_util * 100,
+    disk: metrics.disk_util * 100,
+    fault: metrics.page_fault_rate * 100,
+    thrash: metrics.thrashing_fraction * 100,
+    ready: metrics.avg_ready_queue,
+    readyDigits: 1,
+    finished: metrics.finished_processes,
   };
 
   // Rule explanations based on analyzer.py logic
@@ -104,13 +276,17 @@ export default function ExecutiveSummary() {
     }
   };
 
-  const stats = [
-    { label: 'CPU ใช้งาน', value: activeMetrics.cpu },
-    { label: 'Disk ใช้งาน', value: activeMetrics.disk },
-    { label: 'อัตรา page fault', value: activeMetrics.fault },
-    { label: 'Thrashing', value: activeMetrics.thrash },
-    { label: 'คิว Ready', value: activeMetrics.ready },
-    { label: 'ทำงานเสร็จ', value: activeMetrics.finished },
+  // Value colour follows the analyzer thresholds quoted in the rule explanations above
+  const tone = (warnAt: number, v: number): Tone => (v >= warnAt ? 'warning' : 'normal');
+  const thrashTone: Tone = values.thrash >= 25 ? 'danger' : 'normal';
+
+  const stats: { label: string; value: string; unit: string; tone: Tone; series?: number[]; color: string; min: number; max: number }[] = [
+    { label: 'CPU ใช้งาน', value: values.cpu.toFixed(1), unit: '%', tone: tone(85, values.cpu), series: sparks?.cpu, color: CHART.cpu, min: 0, max: 100 },
+    { label: 'Disk ใช้งาน', value: values.disk.toFixed(1), unit: '%', tone: tone(80, values.disk), series: sparks?.disk, color: CHART.disk, min: 0, max: 100 },
+    { label: 'อัตรา page fault', value: values.fault.toFixed(1), unit: '%', tone: tone(10, values.fault), series: sparks?.fault, color: CHART.ram, min: 0, max: 100 },
+    { label: 'Thrashing', value: values.thrash.toFixed(1), unit: '%', tone: thrashTone, series: sparks?.thrash, color: CHART.fault, min: 0, max: 100 },
+    { label: 'คิว Ready', value: values.ready.toFixed(values.readyDigits), unit: 'ตัว', tone: 'normal', series: sparks?.ready, color: CHART.ready, min: 0, max: Math.max(1, trends?.readyMax ?? 1) },
+    { label: 'ทำงานเสร็จ', value: String(values.finished), unit: 'ตัว', tone: 'normal', series: sparks?.finished, color: CHART.cpu, min: 0, max: Math.max(1, trends?.finishedMax ?? 1) },
   ];
 
   const modes = [
@@ -118,17 +294,86 @@ export default function ExecutiveSummary() {
     { id: 'overall' as const, label: 'ภาพรวมทั้งหมด', Icon: BarChart3 },
   ];
 
-  const StatusIcon = isHealthy ? CheckCircle2 : AlertTriangle;
-  let statusIconTone = 'text-warning';
-  if (isHealthy) statusIconTone = 'text-primary';
-  else if (isCritical) statusIconTone = 'text-danger';
+  let verdict: Verdict = 'bottleneck';
+  if (isHealthy) verdict = 'healthy';
+  else if (isCritical) verdict = 'critical';
+  const vs = VERDICT_STYLE[verdict];
+  let StatusIcon = AlertTriangle;
+  if (verdict === 'healthy') StatusIcon = Check;
+  else if (verdict === 'critical') StatusIcon = AlertOctagon;
 
   return (
-    <section aria-labelledby="executive-summary-title" className="space-y-5">
-      {/* Context line + view controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">
-          {isLive ? 'แนวโน้มการวินิจฉัยจากการรันทั้งหมด' : 'ผลการวินิจฉัยหลังรันจบ'}
+    <section aria-labelledby="executive-summary-title" className="space-y-3">
+      {/* Verdict band */}
+      <div className={`rounded-2xl border px-4 py-4 sm:px-5 ${vs.band}`}>
+        <div className="flex items-start gap-3.5 sm:gap-4">
+          <span
+            aria-hidden="true"
+            className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-white ${vs.disc}`}
+          >
+            <StatusIcon size={22} strokeWidth={2.25} />
+          </span>
+
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-baseline gap-x-2 text-xs">
+              <span className={`font-semibold ${vs.eyebrow}`}>{vs.label}</span>
+              <span className="text-ink/60">ผลวินิจฉัยจากการรันทั้งหมด</span>
+            </p>
+            <h2
+              id="executive-summary-title"
+              className="mt-0.5 text-xl sm:text-2xl font-semibold leading-snug text-ink"
+            >
+              {diagnosis.title}
+            </h2>
+            <p className="mt-1 text-sm sm:text-[15px] text-ink/75 leading-relaxed max-w-3xl">
+              {diagnosis.recommendation}
+            </p>
+
+            <button
+              onClick={() => setShowLogic(!showLogic)}
+              aria-expanded={showLogic}
+              aria-controls="executive-summary-logic"
+              className="mt-2.5 -ml-1 inline-flex items-center gap-1 px-1 rounded-md text-sm font-medium text-ink/70 hover:text-ink transition-colors"
+            >
+              ทำไมระบบถึงสรุปแบบนี้
+              <ChevronDown size={15} className={`transition-transform ${showLogic ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence initial={false}>
+              {showLogic && (
+                <motion.div
+                  id="executive-summary-logic"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className={`mt-3 pt-3 border-t space-y-1.5 max-w-3xl ${vs.rule}`}
+                >
+                  <p className="text-sm text-ink leading-relaxed">{getRuleExplanation()}</p>
+                  <p className="text-xs text-ink/65 leading-relaxed">
+                    เกณฑ์มาจากเงื่อนไขตามทฤษฎี OS ใน <span className="font-mono">sim/analyzer.py</span>{' '}
+                    ทุกข้อสรุปคำนวณจากสถิติจริงของการจำลองรอบนี้ ไม่ได้ใช้ AI หรือสุ่มข้อความ
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+
+      {/* Tile controls: what the numbers below cover */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-1">
+        <p className="text-xs text-muted">
+          {isLive ? (
+            <>
+              ตัวเลขสะสมถึง tick <span className="font-mono tabular-nums text-ink">{currentTick}</span> จาก{' '}
+              <span className="font-mono tabular-nums">{maxTick}</span> และอัปเดตตามไทม์ไลน์
+            </>
+          ) : (
+            <>
+              ค่าตลอดการจำลอง <span className="font-mono tabular-nums">{maxTick}</span> tick
+            </>
+          )}
         </p>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -165,76 +410,29 @@ export default function ExecutiveSummary() {
         </div>
       </div>
 
-      {/* Verdict */}
-      <div className="space-y-2">
-        <h2
-          id="executive-summary-title"
-          className="flex items-start gap-2.5 text-xl sm:text-2xl font-semibold leading-snug text-ink"
-        >
-          <StatusIcon size={20} aria-hidden="true" className={`shrink-0 mt-1 sm:mt-1.5 ${statusIconTone}`} />
-          <span>
-            <span className="sr-only">{isHealthy ? 'ระบบสมดุล: ' : 'พบคอขวด: '}</span>
-            {diagnosis.title}
-          </span>
-        </h2>
-        <p className="text-muted leading-relaxed max-w-3xl">{diagnosis.recommendation}</p>
-      </div>
-
-      {/* Key stats */}
-      <div className="pt-4 border-t border-line">
-        <p className="text-xs text-muted mb-3">
-          {isLive ? (
-            <>
-              ตัวเลขสะสมถึง tick <span className="font-mono tabular-nums">{currentTick}</span> จาก{' '}
-              <span className="font-mono tabular-nums">{maxTick}</span> และอัปเดตตามไทม์ไลน์
-            </>
-          ) : (
-            <>
-              ค่าตลอดการจำลอง <span className="font-mono tabular-nums">{maxTick}</span> tick
-            </>
-          )}
-        </p>
-        <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-4">
-          {stats.map(({ label, value }) => (
-            <div key={label} className="min-w-0">
-              <dt className="text-xs text-muted">{label}</dt>
-              <dd className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{value}</dd>
+      {/* Stat tiles */}
+      <dl className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 sm:gap-3">
+        {stats.map(({ label, value, unit, tone: t, series, color, min, max }) => (
+          <div key={label} className="min-w-0 bg-surface border border-line rounded-xl overflow-hidden">
+            <div className="px-3.5 pt-3">
+              <dt className="text-xs text-muted truncate">{label}</dt>
+              <dd className={`mt-0.5 text-xl sm:text-2xl font-semibold tabular-nums leading-tight ${VALUE_TONE[t]}`}>
+                {value}
+                {unit === '%' ? (
+                  unit
+                ) : (
+                  <span className="ml-1 text-sm font-normal text-muted">{unit}</span>
+                )}
+              </dd>
             </div>
-          ))}
-        </dl>
-      </div>
-
-      {/* Rule explanation */}
-      <div>
-        <button
-          onClick={() => setShowLogic(!showLogic)}
-          aria-expanded={showLogic}
-          aria-controls="executive-summary-logic"
-          className="inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink rounded-md transition-colors"
-        >
-          ทำไมระบบถึงสรุปแบบนี้
-          <ChevronDown size={15} className={`transition-transform ${showLogic ? 'rotate-180' : ''}`} />
-        </button>
-
-        <AnimatePresence initial={false}>
-          {showLogic && (
-            <motion.div
-              id="executive-summary-logic"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
-              className="mt-3 ml-1 pl-4 border-l-2 border-line space-y-2 max-w-3xl"
-            >
-              <p className="text-sm text-ink leading-relaxed">{getRuleExplanation()}</p>
-              <p className="text-xs text-muted leading-relaxed">
-                เกณฑ์มาจากเงื่อนไขตามทฤษฎี OS ใน <span className="font-mono">sim/analyzer.py</span>{' '}
-                ทุกข้อสรุปคำนวณจากสถิติจริงของการจำลองรอบนี้ ไม่ได้ใช้ AI หรือสุ่มข้อความ
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+            <div className="mt-1.5 h-[30px]">
+              {series && series.length > 1 && (
+                <Sparkline values={series} color={color} height={30} min={min} max={max} className="block" />
+              )}
+            </div>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }

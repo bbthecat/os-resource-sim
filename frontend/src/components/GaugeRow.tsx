@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { useSimStore } from '../store/useSimStore';
-import { Cpu, HardDrive, Database, AlertTriangle, type LucideIcon } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import RingGauge from './ui/RingGauge';
+import { CHART } from '../lib/colors';
 
 type Level = 'normal' | 'high' | 'critical';
 
@@ -10,10 +12,16 @@ const VALUE_TONE: Record<Level, string> = {
   critical: 'text-danger',
 };
 
-const FILL_TONE: Record<Level, string> = {
-  normal: 'bg-primary',
-  high: 'bg-warning',
-  critical: 'bg-danger',
+// Ring colours: the resource's own series colour when normal, status tokens past a threshold
+const RING_COLOR: Record<Exclude<Level, 'normal'>, string> = {
+  high: 'rgb(var(--warning))',
+  critical: 'rgb(var(--danger))',
+};
+
+const TRACK_COLOR: Record<Level, string> = {
+  normal: 'rgb(var(--surface-muted))',
+  high: 'rgb(var(--warning-soft))',
+  critical: 'rgb(var(--danger-soft))',
 };
 
 export default function GaugeRow() {
@@ -61,12 +69,12 @@ export default function GaugeRow() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-6">
+      <div className="grid grid-cols-3 gap-3 md:gap-6">
         <Meter
-          icon={Cpu}
           label="CPU"
           value={cpuPercent}
           level={cpuLevel}
+          color={CHART.cpu}
           active={currentSnapshot.cpu_busy}
           detail={
             currentSnapshot.running !== null ? (
@@ -79,10 +87,10 @@ export default function GaugeRow() {
           }
         />
         <Meter
-          icon={Database}
           label="RAM"
           value={ramPercent}
           level={ramLevel}
+          color={CHART.ram}
           detail={
             <>
               <span>
@@ -97,10 +105,10 @@ export default function GaugeRow() {
           }
         />
         <Meter
-          icon={HardDrive}
           label="Disk I/O"
           value={diskPercent}
           level={diskLevel}
+          color={CHART.disk}
           active={currentSnapshot.disk_busy}
           detail={
             <span>
@@ -114,41 +122,42 @@ export default function GaugeRow() {
 }
 
 interface MeterProps {
-  icon: LucideIcon;
   label: string;
   value: number;
   level: Level;
+  // the resource's series colour (used while below the warning threshold)
+  color: string;
   // busy/idle state of the device right now (omitted for RAM)
   active?: boolean;
   detail: ReactNode;
 }
 
-function Meter({ icon: Icon, label, value, level, active, detail }: Readonly<MeterProps>) {
+function Meter({ label, value, level, color, active, detail }: Readonly<MeterProps>) {
   return (
-    <div className="min-w-0">
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-sm text-muted">
-          <Icon size={15} />
-          {label}
-        </span>
+    <div className="min-w-0 flex flex-col items-center text-center gap-2 md:flex-row md:items-center md:text-left md:gap-4">
+      <RingGauge
+        value={value}
+        color={level === 'normal' ? color : RING_COLOR[level]}
+        trackColor={TRACK_COLOR[level]}
+        size={72}
+        stroke={8}
+        label={label}
+        valueClassName={VALUE_TONE[level]}
+      />
+
+      <div className="min-w-0 space-y-1">
+        <p className="text-sm font-semibold text-ink">{label}</p>
+        <div className="flex flex-col gap-0.5 text-xs text-muted tabular-nums">{detail}</div>
         {active !== undefined && (
-          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-            <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-primary' : 'bg-subtle'}`} />
+          <p className="inline-flex items-center gap-1.5 text-xs text-muted">
+            <span
+              aria-hidden="true"
+              className={`w-1.5 h-1.5 rounded-full transition-colors ${active ? 'bg-primary' : 'bg-subtle'}`}
+            />
             {active ? 'ทำงาน' : 'ว่าง'}
-          </span>
+          </p>
         )}
       </div>
-
-      <div className={`mt-1 text-xl font-semibold tabular-nums ${VALUE_TONE[level]}`}>{value}%</div>
-
-      <div className="mt-2 h-1.5 rounded-full bg-surface-muted overflow-hidden" aria-hidden="true">
-        <div
-          className={`h-full rounded-full transition-[width] duration-200 ${FILL_TONE[level]}`}
-          style={{ width: `${value}%` }}
-        />
-      </div>
-
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted tabular-nums">{detail}</div>
     </div>
   );
 }
