@@ -21,6 +21,7 @@ def make_snapshot(sim, ran_pid, cpu_busy: bool, thrashing: bool, events: list) -
         "waiting_io": sorted(p.pid for p in procs if p.state is State.WAITING_IO),
         "waiting_mem": sorted(p.pid for p in procs if p.state is State.WAITING_MEM),
         "frames": sim.memory.frame_owners(),
+        "frame_pages": sim.memory.frame_pages(),
         "disk_busy": sim.io.busy,
         "disk_queue": sim.io.pending_pids(),
         "cpu_busy": cpu_busy,

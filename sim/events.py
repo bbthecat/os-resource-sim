@@ -17,6 +17,10 @@ def page_loaded(pid: int) -> str:
     return f"page_loaded:{pid}"
 
 
+def mem_access(pid: int, page: int, hit: bool) -> str:
+    return f"mem_access:{pid}:{page}:{int(hit)}"
+
+
 def evict(pid: int) -> str:
     """pid = เจ้าของ page ที่ถูกเตะออกจาก RAM"""
     return f"evict:{pid}"

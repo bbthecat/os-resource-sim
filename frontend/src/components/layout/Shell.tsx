@@ -5,6 +5,7 @@ import PlaybackBar from '../PlaybackBar';
 import GaugeRow from '../GaugeRow';
 import QueueLane from '../QueueLane';
 import MemoryGrid from '../MemoryGrid';
+import PageFaultTrace from '../PageFaultTrace';
 import GanttChart from '../GanttChart';
 import UtilizationChart from '../UtilizationChart';
 import BottleneckCard from '../BottleneckCard';
@@ -248,6 +249,11 @@ export default function Shell() {
               {/* Memory Frames Grid */}
               <motion.div variants={itemVariants}>
                 <MemoryGrid />
+              </motion.div>
+
+              {/* Page Fault Trace */}
+              <motion.div variants={itemVariants}>
+                <PageFaultTrace />
               </motion.div>
 
               {/* Multi-mode Charts (Utilization, Queue Depths, Process BarChart) */}

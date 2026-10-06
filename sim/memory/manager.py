@@ -54,6 +54,9 @@ class MemoryManager:
     def frame_owners(self) -> list:
         return [None if key is None else key[0] for key in self.frames]
 
+    def frame_pages(self) -> list:
+        return [None if key is None else key[1] for key in self.frames]
+
     def used_frames(self) -> int:
         return sum(1 for key in self.frames if key is not None)
 

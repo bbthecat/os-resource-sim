@@ -179,9 +179,11 @@ class Simulation:
                 self.page_faults += 1
                 p.state = State.WAITING_MEM
                 self.io.request(p.pid, "page", page, self.config.disk_service_time)
+                events.append(ev.mem_access(p.pid, page, False))
                 events.append(ev.page_fault(p.pid))
                 self.running = None
                 return p.pid, False
+            events.append(ev.mem_access(p.pid, page, True))
             p.record_access(page)
             p.pending_page = None
 
