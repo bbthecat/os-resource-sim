@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useDismiss, backdropDismiss } from '../hooks/useDismiss';
 import { useSimStore } from '../store/useSimStore';
 import { runSimulation } from '../api/client';
 import { SimConfig } from '../types/sim';
@@ -120,6 +121,7 @@ interface ScenarioPresetsModalProps {
 }
 
 export default function ScenarioPresetsModal({ isOpen, onClose, onSelectPreset }: Readonly<ScenarioPresetsModalProps>) {
+  useDismiss(isOpen, onClose);
   const { config, setConfig, setResult } = useSimStore();
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
@@ -149,6 +151,7 @@ export default function ScenarioPresetsModal({ isOpen, onClose, onSelectPreset }
       {isOpen && (
         <motion.div
           key="presets-overlay"
+          onPointerDown={backdropDismiss(onClose)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/30 backdrop-blur-[2px]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

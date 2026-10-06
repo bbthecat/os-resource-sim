@@ -18,6 +18,7 @@ import CustomWorkloadModal from '../CustomWorkloadModal';
 import ScenarioPresetsModal from '../ScenarioPresetsModal';
 import Header from './Header';
 import { usePlayback } from '../../hooks/usePlayback';
+import { useHotkeys } from '../../hooks/useHotkeys';
 import { useSimStore } from '../../store/useSimStore';
 import { BookOpen, GitCompare, Layers, X } from 'lucide-react';
 
@@ -41,6 +42,7 @@ const DIAGNOSIS_TAB: Record<string, TabId> = {
 
 export default function Shell() {
   usePlayback();
+  useHotkeys();
   const { result } = useSimStore();
   const [tab, setTab] = useState<TabId>('overview');
   const [isGuideOpen, setIsGuideOpen] = useState(false);

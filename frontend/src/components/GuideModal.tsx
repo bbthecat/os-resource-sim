@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useDismiss, backdropDismiss } from '../hooks/useDismiss';
 import { X, Play, Stethoscope, ListOrdered, MemoryStick } from 'lucide-react';
 import { useSimStore } from '../store/useSimStore';
 import { CHART } from '../lib/colors';
@@ -21,6 +22,7 @@ const SECONDARY_BUTTON =
   'inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-surface border border-line text-sm font-medium text-ink hover:bg-surface-muted hover:border-line-strong transition-colors';
 
 export default function GuideModal({ isOpen, onClose }: Readonly<GuideModalProps>) {
+  useDismiss(isOpen, onClose);
   const [activeTab, setActiveTab] = useState<GuideTab>('intro');
   const { setConfig, config } = useSimStore();
 
@@ -135,6 +137,7 @@ export default function GuideModal({ isOpen, onClose }: Readonly<GuideModalProps
       {isOpen && (
         <motion.div
           key="guide-overlay"
+          onPointerDown={backdropDismiss(onClose)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/30 backdrop-blur-[2px]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

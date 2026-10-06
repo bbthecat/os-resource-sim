@@ -55,7 +55,7 @@ export default function PlaybackBar({ children }: Readonly<PlaybackBarProps>) {
           <button
             onClick={() => setTick(0)}
             disabled={!result}
-            title="กลับไปจุดเริ่มต้น"
+            title="กลับไปจุดเริ่มต้น (Home)"
             aria-label="กลับไปจุดเริ่มต้น"
             className="p-1.5 rounded-md text-night-muted hover:text-night-text hover:bg-night-raised disabled:opacity-30 transition-colors"
           >
@@ -64,7 +64,7 @@ export default function PlaybackBar({ children }: Readonly<PlaybackBarProps>) {
           <button
             onClick={togglePlay}
             disabled={!result}
-            title={isPlaying ? 'หยุดชั่วคราว' : 'เล่น'}
+            title={isPlaying ? 'หยุดชั่วคราว (Space)' : 'เล่น (Space)'}
             aria-label={isPlaying ? 'หยุดชั่วคราว' : 'เล่น'}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-primary-soft text-night hover:bg-white disabled:opacity-30 transition-colors"
           >
@@ -73,7 +73,7 @@ export default function PlaybackBar({ children }: Readonly<PlaybackBarProps>) {
           <button
             onClick={() => setTick(Math.min(currentTick + 1, maxTick))}
             disabled={!result}
-            title="เดินหน้า 1 tick"
+            title="เดินหน้า 1 tick (→)"
             aria-label="เดินหน้า 1 tick"
             className="p-1.5 rounded-md text-night-muted hover:text-night-text hover:bg-night-raised disabled:opacity-30 transition-colors"
           >

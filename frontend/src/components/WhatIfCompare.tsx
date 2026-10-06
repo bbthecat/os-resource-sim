@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useDismiss, backdropDismiss } from '../hooks/useDismiss';
 import { useSimStore } from '../store/useSimStore';
 import { compareSimulations, CompareResult } from '../api/client';
 import { SimConfig } from '../types/sim';
@@ -112,6 +113,7 @@ function deltaTone(better: boolean | null) {
 }
 
 export default function WhatIfCompare({ isOpen, onClose }: Readonly<WhatIfCompareProps>) {
+  useDismiss(isOpen, onClose);
   const { config: initialConfig } = useSimStore();
 
   const [configA, setConfigA] = useState<SimConfig>({ ...initialConfig });
@@ -187,6 +189,7 @@ export default function WhatIfCompare({ isOpen, onClose }: Readonly<WhatIfCompar
       {isOpen && (
         <motion.div
           key="compare-overlay"
+          onPointerDown={backdropDismiss(onClose)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/30 backdrop-blur-[2px]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

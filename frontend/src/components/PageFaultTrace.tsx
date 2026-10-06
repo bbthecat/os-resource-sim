@@ -186,15 +186,12 @@ export default function PageFaultTrace() {
         </div>
       ) : (
         <div ref={scrollRef} className="relative bg-surface p-6 rounded-lg border border-line overflow-x-auto">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 px-2 gap-4">
-            <div className="flex items-center gap-4">
-              <span className="text-primary-ink text-lg leading-tight font-semibold">Page<br/>reference</span>
-              <span className="text-primary-ink text-lg ml-2 sm:ml-4 tracking-widest font-semibold font-mono tabular-nums">
-                {visibleTraces.length > 0 ? visibleTraces.map(t => t.pageRequested).join(',') : '–'}
-              </span>
-            </div>
-            <span className="text-primary-ink text-lg font-semibold">
-              No. of Page frame - <span className="font-mono tabular-nums">{numFrames}</span>
+          {/* full scroll width, so the sticky labels below stay pinned while the table scrolls */}
+          <div className="w-max min-w-full">
+          <div className="flex items-center mb-8 gap-4">
+            <span className="sticky left-0 z-10 bg-surface pl-2 pr-4 text-primary-ink text-lg leading-tight font-semibold">Page<br/>reference</span>
+            <span className="text-primary-ink text-lg tracking-widest font-semibold font-mono tabular-nums whitespace-nowrap">
+              {visibleTraces.length > 0 ? visibleTraces.map(t => t.pageRequested).join(',') : '–'}
             </span>
           </div>
 
@@ -251,8 +248,14 @@ export default function PageFaultTrace() {
             <div className="w-2 h-px shrink-0" aria-hidden />
           </div>
 
-          <div className="mt-8 text-primary-ink text-xl px-2 font-semibold">
-            Total Page Fault = <span className="font-mono tabular-nums">{totalFaults}</span>
+          <div className="sticky left-0 w-max mt-8 pl-2 pr-4 bg-surface text-primary-ink font-semibold space-y-1">
+            <div className="text-lg">
+              No. of Page frame = <span className="font-mono tabular-nums">{numFrames}</span>
+            </div>
+            <div className="text-xl">
+              Total Page Fault = <span className="font-mono tabular-nums">{totalFaults}</span>
+            </div>
+          </div>
           </div>
         </div>
       )}

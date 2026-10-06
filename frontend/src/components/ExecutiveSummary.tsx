@@ -21,13 +21,14 @@ export default function ExecutiveSummary() {
     const diskBusy = snaps.filter(s => s.disk_busy).length;
     const thrashingCount = snaps.filter(s => s.thrashing).length;
 
+    // same definition as the backend metric: faults / memory accesses
     let pageFaultCount = 0;
+    let memAccessCount = 0;
     snaps.forEach(s => {
-      if (s.events) {
-        s.events.forEach(e => {
-          if (e.startsWith('page_fault') || e === 'PAGE_FAULT') pageFaultCount++;
-        });
-      }
+      s.events?.forEach(e => {
+        if (e.startsWith('page_fault')) pageFaultCount++;
+        else if (e.startsWith('mem_access:')) memAccessCount++;
+      });
     });
 
     const lastSnap = snaps[snaps.length - 1];
@@ -51,7 +52,7 @@ export default function ExecutiveSummary() {
     return {
       cpuUtil: (cpuBusy / n) * 100,
       diskUtil: (diskBusy / n) * 100,
-      pageFaultRate: n > 0 ? (pageFaultCount / n) * 100 : 0,
+      pageFaultRate: memAccessCount > 0 ? (pageFaultCount / memAccessCount) * 100 : 0,
       thrashingFraction: (thrashingCount / n) * 100,
       readyQueue: readyQueueLen,
       finishedProcs,

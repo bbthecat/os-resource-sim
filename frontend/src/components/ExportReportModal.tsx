@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useDismiss, backdropDismiss } from '../hooks/useDismiss';
 import { useSimStore } from '../store/useSimStore';
 import { Download, Copy, Check, Printer, X } from 'lucide-react';
 
@@ -15,6 +16,7 @@ const OPTION_CARD =
   'text-left p-4 rounded-lg border border-line hover:border-primary/50 hover:bg-primary-soft/40 transition-colors';
 
 export default function ExportReportModal({ isOpen, onClose }: Readonly<ExportReportModalProps>) {
+  useDismiss(isOpen, onClose);
   const { result, config } = useSimStore();
   const [copied, setCopied] = useState(false);
 
@@ -110,6 +112,7 @@ export default function ExportReportModal({ isOpen, onClose }: Readonly<ExportRe
       {isOpen && (
         <motion.div
           key="export-overlay"
+          onPointerDown={backdropDismiss(onClose)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/30 backdrop-blur-[2px]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

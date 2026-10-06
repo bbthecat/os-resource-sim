@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useDismiss, backdropDismiss } from '../hooks/useDismiss';
 import { useSimStore } from '../store/useSimStore';
 import { runSimulation } from '../api/client';
 import { X, Play, RefreshCw, Dice5 } from 'lucide-react';
@@ -20,6 +21,7 @@ const SECONDARY_BUTTON =
   'inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-surface border border-line text-sm font-medium text-ink hover:bg-surface-muted hover:border-line-strong transition-colors';
 
 export default function CustomWorkloadModal({ isOpen, onClose }: Readonly<CustomWorkloadModalProps>) {
+  useDismiss(isOpen, onClose);
   const { config, setConfig, setResult } = useSimStore();
   const [localConfig, setLocalConfig] = useState({ ...config });
   const [loading, setLoading] = useState(false);
@@ -49,6 +51,7 @@ export default function CustomWorkloadModal({ isOpen, onClose }: Readonly<Custom
       {isOpen && (
         <motion.div
           key="custom-overlay"
+          onPointerDown={backdropDismiss(onClose)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/30 backdrop-blur-[2px]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
